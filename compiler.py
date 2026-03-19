@@ -1044,4 +1044,261 @@ class PythonCodeGenerator:
         elif node.op_token.type == TokenType.MINUS:
             return f"(-{operand})"
         return f"#?{node.op_token.value}?#({operand})"
-    
+
+
+# --- Interactive Frontend ---
+def compile_pseudocode(source_code: str):
+    """Run the full compilation pipeline and return results."""
+    all_errors = []
+
+    # 1. Tokenize
+    tokens, lex_errors = tokenizer(source_code, all_errors)
+    all_errors.extend(lex_errors)
+
+    # 2. Parse
+    parser = Parser(tokens, source_code)
+    ast = parser.parse()
+    all_errors.extend(parser.errors)
+
+    # 3. Generate
+    generator = PythonCodeGenerator()
+    python_code = generator.generate(ast)
+
+    return tokens, ast, python_code, all_errors
+
+
+HELP_TEXT = r"""
+╔══════════════════════════════════════════════════════════════════╗
+║            CAIE Pseudocode -> Python 编译器                     ║
+╠══════════════════════════════════════════════════════════════════╣
+║                                                                  ║
+║  请输入 CAIE 伪代码，输入完成后在新的一行输入 END 结束。         ║
+║  输入 HELP 查看语法说明，输入 QUIT 退出程序。                   ║
+║                                                                  ║
+║  ---- 支持的语法 ----                                            ║
+║                                                                  ║
+║  变量声明:  DECLARE x : INTEGER                                  ║
+║            DECLARE name : STRING                                 ║
+║            DECLARE nums : ARRAY[1:10] OF INTEGER                 ║
+║            (类型: INTEGER, REAL, STRING, BOOLEAN, CHAR, DATE)    ║
+║                                                                  ║
+║  赋值:     x <- 42                                               ║
+║            name <- "Alice"                                       ║
+║                                                                  ║
+║  输入输出:  INPUT x                                              ║
+║            OUTPUT "Hello ", name                                 ║
+║                                                                  ║
+║  条件:     IF x > 10 THEN                                       ║
+║              OUTPUT "big"                                        ║
+║            ELSE                                                  ║
+║              OUTPUT "small"                                      ║
+║            ENDIF                                                 ║
+║                                                                  ║
+║  FOR循环:  FOR i <- 1 TO 10                                     ║
+║              OUTPUT i                                            ║
+║            NEXT i                                                ║
+║                                                                  ║
+║  WHILE:    WHILE x < 100                                        ║
+║              x <- x + 1                                          ║
+║            ENDWHILE                                              ║
+║                                                                  ║
+║  REPEAT:   REPEAT                                                ║
+║              x <- x + 1                                          ║
+║            UNTIL x >= 10                                         ║
+║                                                                  ║
+║  运算符:   + - * / DIV MOD   (算术)                             ║
+║            = <> < <= > >=    (比较)                              ║
+║            AND OR NOT        (逻辑)                              ║
+║                                                                  ║
+║  注释:     // 这是一行注释                                      ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+"""
+
+EXAMPLES = [
+    {
+        "title": "示例1: 基本变量与输出",
+        "code": """\
+DECLARE greeting : STRING
+DECLARE age : INTEGER
+greeting <- "Hello, World!"
+age <- 18
+OUTPUT greeting
+OUTPUT "Age is: ", age"""
+    },
+    {
+        "title": "示例2: IF-ELSE 条件判断",
+        "code": """\
+DECLARE score : INTEGER
+score <- 75
+IF score >= 60 THEN
+    OUTPUT "Pass"
+ELSE
+    OUTPUT "Fail"
+ENDIF"""
+    },
+    {
+        "title": "示例3: FOR 循环求和",
+        "code": """\
+DECLARE total : INTEGER
+DECLARE i : INTEGER
+total <- 0
+FOR i <- 1 TO 10
+    total <- total + i
+NEXT i
+OUTPUT "Sum 1..10 = ", total"""
+    },
+    {
+        "title": "示例4: WHILE 循环",
+        "code": """\
+DECLARE count : INTEGER
+count <- 1
+WHILE count <= 5
+    OUTPUT "Count: ", count
+    count <- count + 1
+ENDWHILE"""
+    },
+    {
+        "title": "示例5: REPEAT-UNTIL + 数组",
+        "code": """\
+DECLARE nums : ARRAY[1:5] OF INTEGER
+DECLARE i : INTEGER
+i <- 1
+REPEAT
+    nums[i] <- i * i
+    i <- i + 1
+UNTIL i > 5
+FOR i <- 1 TO 5
+    OUTPUT "nums[", i, "] = ", nums[i]
+NEXT i"""
+    },
+    {
+        "title": "示例6: 综合 - 找最大值",
+        "code": """\
+DECLARE nums : ARRAY[1:5] OF INTEGER
+DECLARE maxVal : INTEGER
+DECLARE i : INTEGER
+nums[1] <- 34
+nums[2] <- 72
+nums[3] <- 13
+nums[4] <- 89
+nums[5] <- 56
+maxVal <- nums[1]
+FOR i <- 2 TO 5
+    IF nums[i] > maxVal THEN
+        maxVal <- nums[i]
+    ENDIF
+NEXT i
+OUTPUT "Max value is: ", maxVal"""
+    },
+]
+
+
+def print_separator():
+    print("─" * 66)
+
+
+def run_interactive():
+    print(HELP_TEXT)
+
+    while True:
+        print_separator()
+        print("请输入 CAIE 伪代码 (输入 END 结束, HELP 帮助, QUIT 退出):")
+        print_separator()
+
+        lines = []
+        while True:
+            try:
+                line = input("  > ")
+            except EOFError:
+                return
+            stripped = line.strip().upper()
+            if stripped == "END":
+                break
+            if stripped == "QUIT":
+                print("\n再见！")
+                return
+            if stripped == "HELP":
+                print(HELP_TEXT)
+                lines.clear()
+                print("请输入 CAIE 伪代码:")
+                continue
+            if stripped.startswith("EXAMPLE"):
+                parts = stripped.split()
+                if len(parts) == 2 and parts[1].isdigit():
+                    idx = int(parts[1]) - 1
+                    if 0 <= idx < len(EXAMPLES):
+                        example = EXAMPLES[idx]
+                        print(f"\n  ──── {example['title']} ────")
+                        for eline in example["code"].split("\n"):
+                            print(f"  │ {eline}")
+                        print()
+                        lines = example["code"].split("\n")
+                        print("  (已加载示例，输入 END 编译)")
+                        continue
+                print(f"  可用示例: EXAMPLE 1 ~ EXAMPLE {len(EXAMPLES)}")
+                continue
+            lines.append(line)
+
+        if not lines:
+            print("  (空输入，跳过)")
+            continue
+
+        source_code = "\n".join(lines)
+
+        print()
+        print("=" * 66)
+        print("  源代码:")
+        print("=" * 66)
+        for i, sl in enumerate(source_code.split("\n"), 1):
+            print(f"  {i:3d} | {sl}")
+
+        tokens, ast, python_code, errors = compile_pseudocode(source_code)
+
+        # Show errors/warnings
+        warnings = [e for e in errors if e.severity == ErrorSeverity.WARNING]
+        errs = [e for e in errors if e.severity == ErrorSeverity.ERROR]
+
+        if warnings:
+            print()
+            print("─" * 66)
+            print(f"  ⚠ 警告 ({len(warnings)}):")
+            print("─" * 66)
+            for w in warnings:
+                print(f"  {w}")
+
+        if errs:
+            print()
+            print("─" * 66)
+            print(f"  ✖ 错误 ({len(errs)}):")
+            print("─" * 66)
+            for e in errs:
+                print(f"  {e}")
+            print()
+            print("  编译失败，请检查上方错误信息后重试。")
+            continue
+
+        # Show generated Python
+        print()
+        print("=" * 66)
+        print("  生成的 Python 代码:")
+        print("=" * 66)
+        for i, pl in enumerate(python_code.split("\n"), 1):
+            print(f"  {i:3d} | {pl}")
+        print("=" * 66)
+
+        # Execute
+        print()
+        print("─" * 66)
+        print("  运行结果:")
+        print("─" * 66)
+        try:
+            exec_globals = {}
+            exec(python_code, exec_globals)
+        except Exception as exc:
+            print(f"  运行时错误: {exc}")
+        print("─" * 66)
+
+
+if __name__ == "__main__":
+    run_interactive()
