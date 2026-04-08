@@ -1,0 +1,32 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Past papers & merge scripts
+9702_*.pdf
+9709_*.pdf
+_9702_*
+_9709_*
+_download_merge_*.py
+_probe_*.py
+
+# Temp documents
+temp*.docx
+transcript*_output.txt
+
+# Non-compiler project files
+*.png
+模板大师.docx
+
+# PDF textbooks (too large for git)
+engineering a compiler*.pdf
+(已压缩)engineering a compiler.pdf
+伪代码指南_2-29.pdf
+
+# Word documents
+engineering a compiler*.docx
+
+# NanoBot/CoPaw analysis (keep locally, not in repo)
+analyze_hkuds.py
+HKUDS_Star_Analysis.md
+test_qq_ack_message.py
