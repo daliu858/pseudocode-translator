@@ -5,19 +5,153 @@ code-generation diagnostics.
 """
 from errors import ErrorSeverity, CompileError
 from tokens import TokenType
+from symbols import SymbolInfo
 from ast_nodes import (
     ASTNode, ProgramNode, DeclarationNode, ConstantNode, AssignmentNode,
-    InputNode, OutputNode, IfNode, CaseBranch, CaseNode, ForNode, WhileNode,
-    RepeatNode, ProcedureNode, FunctionDefNode, CallNode, ReturnNode,
-    RecordTypeNode, EnumTypeNode, PointerTypeNode, SetTypeNode, DefineNode,
-    ClassNode, ExpressionStatementNode, ExpressionNode, IdentifierNode,
-    ArrayAccessNode, DotAccessNode, FunctionCallNode, NewExpressionNode,
-    IntegerLiteralNode, RealLiteralNode, StringLiteralNode, CharLiteralNode,
-    BooleanLiteralNode, BinaryOpNode, UnaryOpNode,
+    InputNode, OutputNode, OpenFileNode, ReadFileNode, WriteFileNode,
+    CloseFileNode, SeekNode, GetRecordNode, PutRecordNode, IfNode, CaseBranch,
+    CaseNode, ForNode, WhileNode, RepeatNode, ProcedureNode, FunctionDefNode,
+    CallNode, ReturnNode, RecordTypeNode, EnumTypeNode, PointerTypeNode,
+    SetTypeNode, DefineNode, ClassNode, ExpressionStatementNode, ExpressionNode,
+    IdentifierNode, ArrayAccessNode, DotAccessNode, FunctionCallNode,
+    NewExpressionNode, IntegerLiteralNode, RealLiteralNode, StringLiteralNode,
+    CharLiteralNode, BooleanLiteralNode, BinaryOpNode, UnaryOpNode,
 )
 
 
 # ─── Python Code Generator ──────────────────────────────────────────────
+# ─── Python Code Generator ──────────────────────────────────────────────
+_CAIE_FILE_RUNTIME = '''
+import json as _json
+
+class _CaieFiles:
+    _MODES = {"READ", "WRITE", "APPEND", "RANDOM"}
+
+    def __init__(self):
+        self._handles = {}
+        self._random = {}
+        self._seek = {}
+        self._modes = {}
+        self._canon = {}
+
+    def _key(self, ident):
+        text = str(ident).replace("\\\\", "/")
+        parts = [part for part in text.split("/") if part not in ("", ".")]
+        if (not parts or ".." in parts or ":" in text[:3]
+                or text.startswith("/") or len(parts) != 1):
+            raise OSError(
+                "CAIE filenames must be a single file in the workspace folder"
+            )
+        name = parts[0]
+        folded = name.casefold()
+        return self._canon.setdefault(folded, name)
+
+    def openfile(self, ident, mode):
+        name = self._key(ident)
+        mode = str(mode).upper()
+        if mode not in self._MODES:
+            raise ValueError("file mode must be READ, WRITE, APPEND, or RANDOM")
+        if name in self._modes:
+            self.closefile(ident)
+        self._modes[name] = mode
+        if mode == "RANDOM":
+            records = []
+            try:
+                with open(name, "r", encoding="utf-8", newline="") as fh:
+                    raw = fh.read()
+                if raw.strip():
+                    loaded = _json.loads(raw)
+                    if isinstance(loaded, list):
+                        records = loaded
+            except FileNotFoundError:
+                records = []
+            self._random[name] = records
+            self._seek[name] = 1
+            return
+        py_mode = {"READ": "r", "WRITE": "w", "APPEND": "a"}[mode]
+        self._handles[name] = open(name, py_mode, encoding="utf-8", newline="")
+
+    def closefile(self, ident):
+        name = self._key(ident)
+        if name not in self._modes:
+            raise OSError("file is not open")
+        handle = self._handles.pop(name, None)
+        if handle is not None:
+            handle.close()
+        records = self._random.pop(name, None)
+        if records is not None:
+            with open(name, "w", encoding="utf-8", newline="") as fh:
+                _json.dump(records, fh, ensure_ascii=False)
+        self._seek.pop(name, None)
+        self._modes.pop(name, None)
+
+    def readfile(self, ident):
+        handle = self._require_seq(ident, {"READ"})
+        line = handle.readline()
+        if line.endswith("\\n"):
+            line = line[:-1]
+        if line.endswith("\\r"):
+            line = line[:-1]
+        return line
+
+    def writefile(self, ident, data):
+        handle = self._require_seq(ident, {"WRITE", "APPEND"})
+        handle.write(str(data) + "\\n")
+        handle.flush()
+
+    def eof(self, ident):
+        handle = self._require_seq(ident, {"READ"})
+        position = handle.tell()
+        chunk = handle.read(1)
+        handle.seek(position)
+        return chunk == ""
+
+    def seek(self, ident, address):
+        name = self._key(ident)
+        if self._modes.get(name) != "RANDOM":
+            raise OSError("SEEK requires a file opened FOR RANDOM")
+        address = int(address)
+        if address < 1:
+            raise OSError("CAIE SEEK address is 1-based")
+        self._seek[name] = address
+
+    def getrecord(self, ident, target=None):
+        name = self._key(ident)
+        records = self._require_random(name)
+        index = self._seek[name] - 1
+        record = records[index] if 0 <= index < len(records) else None
+        if target is not None and hasattr(target, "__dict__") and isinstance(record, dict):
+            for field, value in record.items():
+                setattr(target, field, value)
+            return target
+        return record if record is not None else target
+
+    def putrecord(self, ident, value):
+        name = self._key(ident)
+        records = self._require_random(name)
+        index = self._seek[name] - 1
+        if index < 0:
+            raise OSError("CAIE SEEK address is 1-based")
+        payload = dict(value.__dict__) if hasattr(value, "__dict__") else value
+        while len(records) <= index:
+            records.append(None)
+        records[index] = payload
+
+    def _require_seq(self, ident, modes):
+        name = self._key(ident)
+        if self._modes.get(name) not in modes:
+            raise OSError("file is not open for this operation")
+        return self._handles[name]
+
+    def _require_random(self, name):
+        if self._modes.get(name) != "RANDOM":
+            raise OSError("random file operation requires OPENFILE FOR RANDOM")
+        return self._random[name]
+
+_caie_files = _CaieFiles()
+'''.lstrip()
+
+
 class PythonCodeGenerator:
     _BUILTINS = {
         "LENGTH": lambda a: f"len({a[0]})",
@@ -37,13 +171,17 @@ class PythonCodeGenerator:
     def __init__(self, symbol_table=None):
         self.indent_level = 0
         self.python_code = []
-        self.scope_stack = [symbol_table if symbol_table is not None else {}]
+        # Shallow-copy the handed-over table: the generator reads the parser's
+        # global symbols but must not alias (and thus never mutates) the
+        # parser's own dict.
+        self.scope_stack = [dict(symbol_table) if symbol_table is not None else {}]
         self.array_metadata = {}
         self._class_fields = set()
         self._class_types = set()
         self._class_registry = {}
         self._proc_registry = {}
         self.errors = []
+        self._uses_files = False
 
     def _push_scope(self):
         self.scope_stack.append({})
@@ -70,10 +208,12 @@ class PythonCodeGenerator:
     def _default(self, type_name):
         return self._TYPE_DEFAULTS.get(type_name, "None")
 
-    def _check_declared(self, var_name):
+    def _check_declared(self, var_name, token=None):
         if self._lookup(var_name) is None and var_name not in self._class_fields:
+            line = token.line if token is not None else 0
+            column = token.column if token is not None else 0
             self.errors.append(CompileError(
-                ErrorSeverity.ERROR, 0, 0,
+                ErrorSeverity.ERROR, line, column,
                 f"Variable '{var_name}' is used but has not been declared.",
                 suggestion=f"Add 'DECLARE {var_name} : <type>' before using it."))
             return False
@@ -83,7 +223,10 @@ class PythonCodeGenerator:
         if not program_node:
             return "# Error during parsing. No Python code generated."
         self.visit(program_node)
-        return "\n".join(self.python_code)
+        body = "\n".join(self.python_code)
+        if self._uses_files:
+            return _CAIE_FILE_RUNTIME + "\n" + body
+        return body
 
     def visit(self, node):
         method = 'visit_' + type(node).__name__
@@ -101,10 +244,10 @@ class PythonCodeGenerator:
     def visit_DeclarationNode(self, node):
         var = self.visit(node.identifier)
         if node.type_name == "ARRAY" and node.array_spec:
-            self._declare(var, {"type": "ARRAY", "array_spec": node.array_spec,
-                                "item_type": node.array_spec.get("item_type", "INTEGER")})
+            self._declare(var, SymbolInfo(type="ARRAY", array_spec=node.array_spec,
+                                          item_type=node.array_spec.get("item_type", "INTEGER")))
         else:
-            self._declare(var, {"type": node.type_name, "array_spec": None})
+            self._declare(var, SymbolInfo(type=node.type_name))
         if node.type_name == "ARRAY" and node.array_spec:
             spec = node.array_spec
             item_t = spec.get("item_type", "INTEGER")
@@ -139,7 +282,7 @@ class PythonCodeGenerator:
 
     def visit_ConstantNode(self, node):
         name = self.visit(node.identifier)
-        self._declare(name, {"type": "CONSTANT", "array_spec": None})
+        self._declare(name, SymbolInfo(type="CONSTANT"))
         val = self.visit(node.value)
         self._add_line(f"{name} = {val}")
 
@@ -149,18 +292,18 @@ class PythonCodeGenerator:
     # ── statements ──
     def visit_AssignmentNode(self, node):
         if isinstance(node.target, IdentifierNode):
-            self._check_declared(node.target.name)
+            self._check_declared(node.target.name, node.target.token)
         elif isinstance(node.target, ArrayAccessNode):
-            self._check_declared(node.target.identifier.name)
+            self._check_declared(node.target.identifier.name, node.target.identifier.token)
         target = self.visit(node.target)
         value = self.visit(node.value)
         self._add_line(f"{target} = {value}")
 
     def visit_InputNode(self, node):
         var = self.visit(node.identifier)
-        self._check_declared(var)
-        info = self._lookup(var) or {"type": "STRING"}
-        type_name = info.get("type", "STRING")
+        self._check_declared(var, getattr(node.identifier, 'token', None))
+        info = self._lookup(var)
+        type_name = info.type if info is not None else "STRING"
         cast = {"INTEGER": "int", "REAL": "float"}.get(type_name)
         prompt = f"'Enter {var} ({type_name}): '"
         if cast:
@@ -171,11 +314,56 @@ class PythonCodeGenerator:
     def visit_OutputNode(self, node):
         for e in node.expressions:
             if isinstance(e, IdentifierNode):
-                self._check_declared(e.name)
+                self._check_declared(e.name, e.token)
             elif isinstance(e, ArrayAccessNode):
-                self._check_declared(e.identifier.name)
+                self._check_declared(e.identifier.name, e.identifier.token)
         parts = [self.visit(e) for e in node.expressions]
         self._add_line(f"print({', '.join(parts)})")
+
+    def _file_ident_py(self, node):
+        self._uses_files = True
+        if isinstance(node, IdentifierNode) and self._lookup(node.name) is None:
+            return repr(node.name)
+        return self.visit(node)
+
+    def visit_OpenFileNode(self, node):
+        ident = self._file_ident_py(node.file_ident)
+        self._add_line(f"_caie_files.openfile({ident}, {node.mode!r})")
+
+    def visit_ReadFileNode(self, node):
+        ident = self._file_ident_py(node.file_ident)
+        if isinstance(node.target, IdentifierNode):
+            self._check_declared(node.target.name, node.target.token)
+        elif isinstance(node.target, ArrayAccessNode):
+            self._check_declared(node.target.identifier.name, node.target.identifier.token)
+        target = self.visit(node.target)
+        self._add_line(f"{target} = _caie_files.readfile({ident})")
+
+    def visit_WriteFileNode(self, node):
+        ident = self._file_ident_py(node.file_ident)
+        data = self.visit(node.data)
+        self._add_line(f"_caie_files.writefile({ident}, {data})")
+
+    def visit_CloseFileNode(self, node):
+        ident = self._file_ident_py(node.file_ident)
+        self._add_line(f"_caie_files.closefile({ident})")
+
+    def visit_SeekNode(self, node):
+        ident = self._file_ident_py(node.file_ident)
+        address = self.visit(node.address)
+        self._add_line(f"_caie_files.seek({ident}, {address})")
+
+    def visit_GetRecordNode(self, node):
+        ident = self._file_ident_py(node.file_ident)
+        if isinstance(node.target, IdentifierNode):
+            self._check_declared(node.target.name, node.target.token)
+        target = self.visit(node.target)
+        self._add_line(f"{target} = _caie_files.getrecord({ident}, {target})")
+
+    def visit_PutRecordNode(self, node):
+        ident = self._file_ident_py(node.file_ident)
+        value = self.visit(node.value)
+        self._add_line(f"_caie_files.putrecord({ident}, {value})")
 
     def visit_IfNode(self, node):
         self._add_line(f"if {self.visit(node.condition)}:")
@@ -226,7 +414,7 @@ class PythonCodeGenerator:
 
     def visit_ForNode(self, node):
         var = self.visit(node.variable)
-        self._check_declared(var)
+        self._check_declared(var, getattr(node.variable, 'token', None))
         start = self.visit(node.start_expr)
         end = self.visit(node.end_expr)
         if node.step_expr:
@@ -273,8 +461,8 @@ class PythonCodeGenerator:
         self.indent_level += 1
         self._push_scope()
         for p in node.params:
-            self._declare(p["name"], {"type": p.get("type", "ANY"), "array_spec": None,
-                                      "pass_by": p.get("pass_by", "BYVAL")})
+            self._declare(p["name"], SymbolInfo(type=p.get("type", "ANY"),
+                                                pass_by=p.get("pass_by", "BYVAL")))
         if not node.body:
             self._add_line("pass")
         for s in node.body:
@@ -290,8 +478,8 @@ class PythonCodeGenerator:
         self.indent_level += 1
         self._push_scope()
         for p in node.params:
-            self._declare(p["name"], {"type": p.get("type", "ANY"), "array_spec": None,
-                                      "pass_by": p.get("pass_by", "BYVAL")})
+            self._declare(p["name"], SymbolInfo(type=p.get("type", "ANY"),
+                                                pass_by=p.get("pass_by", "BYVAL")))
         if not node.body:
             self._add_line("pass")
         for s in node.body:
@@ -341,7 +529,6 @@ class PythonCodeGenerator:
         self._add_line("")
 
     def visit_EnumTypeNode(self, node):
-        parts = ", ".join(f"{v} = {i}" for i, v in enumerate(node.values))
         for i, v in enumerate(node.values):
             self._add_line(f"{v} = {i}")
 
@@ -434,7 +621,7 @@ class PythonCodeGenerator:
         self.indent_level += 1
         self._push_scope()
         for p in method.params:
-            self._declare(p["name"], {"type": p.get("type", "ANY"), "array_spec": None})
+            self._declare(p["name"], SymbolInfo(type=p.get("type", "ANY")))
         body = method.body if hasattr(method, 'body') else []
         if not body:
             self._add_line("pass")
@@ -448,7 +635,7 @@ class PythonCodeGenerator:
         if self._class_fields and node.name in self._class_fields:
             return f"self.{node.name}"
         info = self._lookup(node.name)
-        if info and info.get("pass_by") == "BYREF":
+        if info is not None and info.pass_by == "BYREF":
             return f"{node.name}[0]"
         return node.name
 
@@ -475,6 +662,12 @@ class PythonCodeGenerator:
         args_py = [self.visit(a) for a in node.args]
         if isinstance(node.callee, IdentifierNode):
             name_upper = node.callee.name.upper()
+            if name_upper == "EOF":
+                self._uses_files = True
+                if node.args:
+                    ident = self._file_ident_py(node.args[0])
+                    return f"_caie_files.eof({ident})"
+                return "_caie_files.eof('')"
             builtin = self._BUILTINS.get(name_upper)
             if builtin:
                 return builtin(args_py)

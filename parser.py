@@ -5,15 +5,17 @@ diagnostics.
 """
 from errors import ErrorSeverity, CompileError
 from tokens import TokenType, Token
+from symbols import SymbolInfo
 from ast_nodes import (
     ASTNode, ProgramNode, DeclarationNode, ConstantNode, AssignmentNode,
-    InputNode, OutputNode, IfNode, CaseBranch, CaseNode, ForNode, WhileNode,
-    RepeatNode, ProcedureNode, FunctionDefNode, CallNode, ReturnNode,
-    RecordTypeNode, EnumTypeNode, PointerTypeNode, SetTypeNode, DefineNode,
-    ClassNode, ExpressionStatementNode, ExpressionNode, IdentifierNode,
-    ArrayAccessNode, DotAccessNode, FunctionCallNode, NewExpressionNode,
-    IntegerLiteralNode, RealLiteralNode, StringLiteralNode, CharLiteralNode,
-    BooleanLiteralNode, BinaryOpNode, UnaryOpNode,
+    InputNode, OutputNode, OpenFileNode, ReadFileNode, WriteFileNode,
+    CloseFileNode, SeekNode, GetRecordNode, PutRecordNode, IfNode, CaseBranch,
+    CaseNode, ForNode, WhileNode, RepeatNode, ProcedureNode, FunctionDefNode,
+    CallNode, ReturnNode, RecordTypeNode, EnumTypeNode, PointerTypeNode,
+    SetTypeNode, DefineNode, ClassNode, ExpressionStatementNode, ExpressionNode,
+    IdentifierNode, ArrayAccessNode, DotAccessNode, FunctionCallNode,
+    NewExpressionNode, IntegerLiteralNode, RealLiteralNode, StringLiteralNode,
+    CharLiteralNode, BooleanLiteralNode, BinaryOpNode, UnaryOpNode,
 )
 
 
@@ -110,6 +112,10 @@ class Parser:
             TokenType.KEYWORD_PRINT, TokenType.KEYWORD_CALL, TokenType.KEYWORD_RETURN,
             TokenType.KEYWORD_CASE, TokenType.KEYWORD_PROCEDURE, TokenType.KEYWORD_FUNCTION,
             TokenType.KEYWORD_TYPE, TokenType.KEYWORD_CLASS, TokenType.KEYWORD_DEFINE,
+            TokenType.KEYWORD_OPENFILE, TokenType.KEYWORD_READFILE,
+            TokenType.KEYWORD_WRITEFILE, TokenType.KEYWORD_CLOSEFILE,
+            TokenType.KEYWORD_SEEK, TokenType.KEYWORD_GETRECORD,
+            TokenType.KEYWORD_PUTRECORD,
             TokenType.KEYWORD_ENDIF, TokenType.KEYWORD_ENDWHILE, TokenType.KEYWORD_NEXT,
             TokenType.KEYWORD_UNTIL, TokenType.KEYWORD_ENDCASE, TokenType.KEYWORD_ENDPROCEDURE,
             TokenType.KEYWORD_ENDFUNCTION, TokenType.KEYWORD_ENDTYPE, TokenType.KEYWORD_ENDCLASS,
@@ -163,10 +169,26 @@ class Parser:
         if tt in (TokenType.KEYWORD_PUBLIC, TokenType.KEYWORD_PRIVATE):
             self._advance()
             return self._parse_statement()
+        if tt == TokenType.KEYWORD_OPENFILE:
+            return self._parse_openfile()
+        if tt == TokenType.KEYWORD_READFILE:
+            return self._parse_readfile()
+        if tt == TokenType.KEYWORD_WRITEFILE:
+            return self._parse_writefile()
+        if tt == TokenType.KEYWORD_CLOSEFILE:
+            return self._parse_closefile()
+        if tt == TokenType.KEYWORD_SEEK:
+            return self._parse_seek()
+        if tt == TokenType.KEYWORD_GETRECORD:
+            return self._parse_getrecord()
+        if tt == TokenType.KEYWORD_PUTRECORD:
+            return self._parse_putrecord()
 
         tok = self._current_token()
         valid = ("DECLARE, CONSTANT, IF, CASE, FOR, WHILE, REPEAT, "
-                 "INPUT, OUTPUT, CALL, RETURN, PROCEDURE, FUNCTION, TYPE, CLASS, or an identifier")
+                 "INPUT, OUTPUT, CALL, RETURN, PROCEDURE, FUNCTION, TYPE, CLASS, "
+                 "OPENFILE, READFILE, WRITEFILE, CLOSEFILE, SEEK, GETRECORD, "
+                 "PUTRECORD, or an identifier")
         self._error(f"Unexpected token '{tok.value}' at start of statement.", tok,
                     suggestion=f"A statement must start with: {valid}.")
         raise SyntaxError("Invalid start of statement")
@@ -263,12 +285,12 @@ class Parser:
                 array_spec["low_bound2"] = low2
                 array_spec["high_bound2"] = high2
             for idt in ids:
-                self.symbol_table[idt.value] = {"type": "ARRAY", "array_spec": array_spec, "item_type": item_type.value}
+                self.symbol_table[idt.value] = SymbolInfo(type="ARRAY", array_spec=array_spec, item_type=item_type.value)
         else:
             tp = self._eat_type()
             type_name = tp.value
             for idt in ids:
-                self.symbol_table[idt.value] = {"type": type_name, "array_spec": None}
+                self.symbol_table[idt.value] = SymbolInfo(type=type_name)
 
         if len(ids) == 1:
             return DeclarationNode(IdentifierNode(ids[0].value, ids[0]), type_name, array_spec)
@@ -278,7 +300,7 @@ class Parser:
         self._eat(TokenType.KEYWORD_CONSTANT)
         id_tok = self._eat(TokenType.IDENTIFIER)
         id_node = IdentifierNode(id_tok.value, id_tok)
-        self.symbol_table[id_tok.value] = {"type": "CONSTANT", "array_spec": None}
+        self.symbol_table[id_tok.value] = SymbolInfo(type="CONSTANT")
         self._eat(TokenType.EQUALS)
         value = self._parse_expression()
         return ConstantNode(id_node, value)
@@ -344,14 +366,27 @@ class Parser:
         tok = self._current_token()
         if tok.type in (TokenType.KEYWORD_OTHERWISE, TokenType.KEYWORD_ENDCASE, TokenType.EOF):
             return True
-        if tok.type in (TokenType.INTEGER_LITERAL, TokenType.REAL_LITERAL,
-                        TokenType.STRING_LITERAL, TokenType.CHAR_LITERAL,
-                        TokenType.BOOLEAN_LITERAL):
-            nt = self._peek()
-            return nt.type in (TokenType.COLON, TokenType.KEYWORD_TO)
-        if tok.type == TokenType.IDENTIFIER:
-            nt = self._peek()
-            return nt.type in (TokenType.COLON, TokenType.KEYWORD_TO)
+        expression_starts = {
+            TokenType.IDENTIFIER, TokenType.INTEGER_LITERAL, TokenType.REAL_LITERAL,
+            TokenType.STRING_LITERAL, TokenType.CHAR_LITERAL,
+            TokenType.BOOLEAN_LITERAL, TokenType.LPAREN, TokenType.MINUS,
+            TokenType.KEYWORD_NOT, TokenType.KEYWORD_STEP,
+        }
+        if tok.type in expression_starts:
+            # CASE labels may be full expressions, for example
+            # ``Boundary[1] - 2 TO Boundary[1] + 2 :``.  Newlines are not
+            # tokens, so inspect only the current source line for the label's
+            # colon and stop if an assignment arrow proves this is a body
+            # statement instead.
+            line = tok.line
+            index = self.current_token_index
+            while index < len(self.tokens) and self.tokens[index].line == line:
+                candidate = self.tokens[index]
+                if candidate.type == TokenType.ASSIGN:
+                    return False
+                if candidate.type == TokenType.COLON:
+                    return True
+                index += 1
         return False
 
     def _parse_case(self):
@@ -435,7 +470,11 @@ class Parser:
         pass_by = "BYVAL"
         while True:
             if self._current_token().type in (TokenType.KEYWORD_BYVAL, TokenType.KEYWORD_BYREF):
-                pass_by = self._current_token().value
+                pass_by = (
+                    "BYREF"
+                    if self._current_token().type == TokenType.KEYWORD_BYREF
+                    else "BYVAL"
+                )
                 self._advance()
             names = [self._eat(TokenType.IDENTIFIER)]
             while self._current_token().type == TokenType.COMMA:
@@ -469,7 +508,7 @@ class Parser:
         self._eat(TokenType.RPAREN)
         self._initialize_scope()
         for p in params:
-            self.symbol_table[p["name"]] = {"type": p.get("type", "ANY"), "array_spec": None}
+            self.symbol_table[p["name"]] = SymbolInfo(type=p.get("type", "ANY"), pass_by=p.get("pass_by", "BYVAL"))
         body = []
         while self._current_token().type not in (TokenType.KEYWORD_ENDPROCEDURE, TokenType.EOF):
             self._collect_stmt(body)
@@ -493,7 +532,7 @@ class Parser:
         ret_type = self._eat_type()
         self._initialize_scope()
         for p in params:
-            self.symbol_table[p["name"]] = {"type": p.get("type", "ANY"), "array_spec": None}
+            self.symbol_table[p["name"]] = SymbolInfo(type=p.get("type", "ANY"), pass_by=p.get("pass_by", "BYVAL"))
         body = []
         while self._current_token().type not in (TokenType.KEYWORD_ENDFUNCTION, TokenType.EOF):
             self._collect_stmt(body)
@@ -631,6 +670,91 @@ class Parser:
         self._finalize_scope()
         return ClassNode(name_tok.value, parent, members)
 
+    # ── file handling (CIE 9618 §9 / IGCSE 0478) ──
+    def _parse_file_identifier(self):
+        tok = self._current_token()
+        if tok.type == TokenType.STRING_LITERAL:
+            self._advance()
+            return StringLiteralNode(tok.value, tok)
+        if tok.type != TokenType.IDENTIFIER:
+            self._error(
+                "Expected a file identifier (string or name).",
+                tok,
+                suggestion='Use a quoted name such as "Data.txt", or a STRING variable.',
+            )
+            raise SyntaxError("Invalid file identifier")
+        id_tok = self._eat(TokenType.IDENTIFIER)
+        parts = [id_tok.value]
+        while (
+            self._current_token().type == TokenType.DOT
+            and self._peek().type == TokenType.IDENTIFIER
+        ):
+            self._eat(TokenType.DOT)
+            parts.append(self._eat(TokenType.IDENTIFIER).value)
+        if len(parts) == 1:
+            return IdentifierNode(parts[0], id_tok)
+        return StringLiteralNode(".".join(parts), id_tok)
+
+    def _parse_file_mode(self):
+        tok = self._current_token()
+        if tok.type == TokenType.IDENTIFIER:
+            mode = tok.value.upper()
+            if mode in {"READ", "WRITE", "APPEND", "RANDOM"}:
+                self._advance()
+                return mode
+        self._error(
+            f"Expected file mode READ, WRITE, APPEND, or RANDOM, got '{tok.value}'.",
+            tok,
+        )
+        raise SyntaxError("Invalid file mode")
+
+    def _parse_optional_paren_args(self, parse_second):
+        paren = self._current_token().type == TokenType.LPAREN
+        if paren:
+            self._eat(TokenType.LPAREN)
+        first = self._parse_file_identifier()
+        self._eat(TokenType.COMMA)
+        second = parse_second()
+        if paren:
+            self._eat(TokenType.RPAREN)
+        return first, second
+
+    def _parse_openfile(self):
+        self._eat(TokenType.KEYWORD_OPENFILE)
+        file_ident = self._parse_file_identifier()
+        self._eat(TokenType.KEYWORD_FOR)
+        mode = self._parse_file_mode()
+        return OpenFileNode(file_ident, mode)
+
+    def _parse_readfile(self):
+        self._eat(TokenType.KEYWORD_READFILE)
+        file_ident, target = self._parse_optional_paren_args(self._parse_access_chain)
+        return ReadFileNode(file_ident, target)
+
+    def _parse_writefile(self):
+        self._eat(TokenType.KEYWORD_WRITEFILE)
+        file_ident, data = self._parse_optional_paren_args(self._parse_expression)
+        return WriteFileNode(file_ident, data)
+
+    def _parse_closefile(self):
+        self._eat(TokenType.KEYWORD_CLOSEFILE)
+        return CloseFileNode(self._parse_file_identifier())
+
+    def _parse_seek(self):
+        self._eat(TokenType.KEYWORD_SEEK)
+        file_ident, address = self._parse_optional_paren_args(self._parse_expression)
+        return SeekNode(file_ident, address)
+
+    def _parse_getrecord(self):
+        self._eat(TokenType.KEYWORD_GETRECORD)
+        file_ident, target = self._parse_optional_paren_args(self._parse_access_chain)
+        return GetRecordNode(file_ident, target)
+
+    def _parse_putrecord(self):
+        self._eat(TokenType.KEYWORD_PUTRECORD)
+        file_ident, value = self._parse_optional_paren_args(self._parse_expression)
+        return PutRecordNode(file_ident, value)
+
     # ── expressions ──
     def _parse_expression(self):
         return self._parse_logical_or()
@@ -713,6 +837,12 @@ class Parser:
             expr = self._parse_expression()
             self._eat(TokenType.RPAREN)
             return expr
+        if tok.type == TokenType.KEYWORD_EOF:
+            self._advance()
+            self._eat(TokenType.LPAREN)
+            file_ident = self._parse_file_identifier()
+            self._eat(TokenType.RPAREN)
+            return FunctionCallNode(IdentifierNode("EOF", tok), [file_ident], tok)
         if tok.type == TokenType.KEYWORD_NEW:
             self._advance()
             cls_tok = self._eat(TokenType.IDENTIFIER)

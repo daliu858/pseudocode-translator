@@ -5,13 +5,14 @@ from errors import ErrorSeverity, CompileError
 from tokens import TokenType, Token, KEYWORDS
 from ast_nodes import (
     ASTNode, ProgramNode, DeclarationNode, ConstantNode, AssignmentNode,
-    InputNode, OutputNode, IfNode, CaseBranch, CaseNode, ForNode, WhileNode,
-    RepeatNode, ProcedureNode, FunctionDefNode, CallNode, ReturnNode,
-    RecordTypeNode, EnumTypeNode, PointerTypeNode, SetTypeNode, DefineNode,
-    ClassNode, ExpressionStatementNode, ExpressionNode, IdentifierNode,
-    ArrayAccessNode, DotAccessNode, FunctionCallNode, NewExpressionNode,
-    IntegerLiteralNode, RealLiteralNode, StringLiteralNode, CharLiteralNode,
-    BooleanLiteralNode, BinaryOpNode, UnaryOpNode,
+    InputNode, OutputNode, OpenFileNode, ReadFileNode, WriteFileNode,
+    CloseFileNode, SeekNode, GetRecordNode, PutRecordNode, IfNode, CaseBranch,
+    CaseNode, ForNode, WhileNode, RepeatNode, ProcedureNode, FunctionDefNode,
+    CallNode, ReturnNode, RecordTypeNode, EnumTypeNode, PointerTypeNode,
+    SetTypeNode, DefineNode, ClassNode, ExpressionStatementNode, ExpressionNode,
+    IdentifierNode, ArrayAccessNode, DotAccessNode, FunctionCallNode,
+    NewExpressionNode, IntegerLiteralNode, RealLiteralNode, StringLiteralNode,
+    CharLiteralNode, BooleanLiteralNode, BinaryOpNode, UnaryOpNode,
 )
 from lexer import tokenizer
 from parser import Parser
@@ -19,9 +20,9 @@ from codegen import PythonCodeGenerator
 
 
 # ─── Interactive Frontend ────────────────────────────────────────────────
-def compile_pseudocode(source_code: str):
+def compile_pseudocode(source_code: str, tokenize=tokenizer):
     all_errors = []
-    tokens, _ = tokenizer(source_code, all_errors)
+    tokens, _ = tokenize(source_code, all_errors)
     parser = Parser(tokens, source_code)
     ast = parser.parse()
     all_errors.extend(parser.errors)
@@ -106,6 +107,12 @@ HELP_TEXT = r"""
 ║  ╌╌╌╌ OOP ╌╌╌╌                                                      ║
 ║  CLASS Cat INHERITS Pet ... ENDCLASS                                 ║
 ║  PUBLIC / PRIVATE       SUPER.NEW(...)       obj <- NEW Cat(...)     ║
+║                                                                      ║
+║  ╌╌╌╌ 文件操作 ╌╌╌╌                                                 ║
+║  OPENFILE "Data.txt" FOR READ / WRITE / APPEND / RANDOM             ║
+║  READFILE "Data.txt", Line     WRITEFILE "Data.txt", Line            ║
+║  WHILE NOT EOF("Data.txt") ...  CLOSEFILE "Data.txt"                ║
+║  SEEK "Rec.Dat", 1  GETRECORD "Rec.Dat", Rec  PUTRECORD "Rec.Dat", Rec║
 ║                                                                      ║
 ║  ╌╌╌╌ 运算符 ╌╌╌╌                                                   ║
 ║  + - * / DIV MOD   = <> < <= > >=   AND OR NOT   & (字符串连接)     ║

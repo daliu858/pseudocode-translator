@@ -38,6 +38,40 @@ class OutputNode(ASTNode):
     def __init__(self, expressions):
         self.expressions = expressions
 
+class OpenFileNode(ASTNode):
+    def __init__(self, file_ident, mode):
+        self.file_ident = file_ident
+        self.mode = mode
+
+class ReadFileNode(ASTNode):
+    def __init__(self, file_ident, target):
+        self.file_ident = file_ident
+        self.target = target
+
+class WriteFileNode(ASTNode):
+    def __init__(self, file_ident, data):
+        self.file_ident = file_ident
+        self.data = data
+
+class CloseFileNode(ASTNode):
+    def __init__(self, file_ident):
+        self.file_ident = file_ident
+
+class SeekNode(ASTNode):
+    def __init__(self, file_ident, address):
+        self.file_ident = file_ident
+        self.address = address
+
+class GetRecordNode(ASTNode):
+    def __init__(self, file_ident, target):
+        self.file_ident = file_ident
+        self.target = target
+
+class PutRecordNode(ASTNode):
+    def __init__(self, file_ident, value):
+        self.file_ident = file_ident
+        self.value = value
+
 class IfNode(ASTNode):
     def __init__(self, condition, then_block, else_block=None):
         self.condition = condition

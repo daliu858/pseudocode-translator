@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check module boundaries
+        run: python check_architecture.py
+
+      - name: Compile Python sources
+        run: >-
+          python -m compileall -q
+          compiler.py errors.py tokens.py ast_nodes.py
+          lexer.py parser.py codegen.py
+          ide test_file_handling.py test_ide_runner.py
+
+      - name: Run IDE and file-handling tests (compiler-only mode)
+        run: python -m unittest test_ide_runner test_file_handling -v

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh" data-theme="studio-dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Pseudocode Studio</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/alegreya-sans@5.2.8/400.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/alegreya-sans@5.2.8/700.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inconsolata@5.2.7/400.css">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-leading">
+        <button class="button quiet icon-button" id="sidebar-toggle" type="button" data-i18n-title="collapseSidebar" aria-expanded="true" aria-label="Toggle sidebar">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3v10"/><path d="M6 5h6M6 8h6M6 11h6"/></svg>
+        </button>
+      </div>
+
+      <div class="document-title">
+        <span class="status-dot" id="service-dot" aria-hidden="true"></span>
+        <span id="file-name">main.pseudo</span>
+        <span class="dirty-indicator" id="dirty-indicator" title="Unsaved changes"></span>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="locale-switch" role="group" aria-label="Language">
+          <button class="locale-button active" id="locale-zh" type="button">中</button>
+          <button class="locale-button" id="locale-en" type="button">EN</button>
+        </div>
+        <div class="popover-anchor">
+          <button class="button quiet" id="workspace-open-trigger" type="button" data-i18n-title="dataFolderTitle" aria-haspopup="true" aria-expanded="false">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.6 3.6v9.2h12.8V6H7.2L5.8 3.6H1.6Z"/><path d="M1.6 6h12.8"/></svg>
+            <span class="button-label" data-i18n="dataFolder">数据文件夹</span>
+          </button>
+          <div class="popover" id="workspace-popover" hidden>
+            <div class="popover-heading" data-i18n="dataFiles">数据文件</div>
+            <p class="popover-blurb" id="files-blurb" data-i18n="filesBlurb"></p>
+            <div id="workspace-path" class="workspace-meta"></div>
+            <div class="workspace-actions">
+              <button class="chip-button" id="workspace-open-button" type="button" data-i18n="openFolder" data-i18n-title="openFolderTitle">打开文件夹</button>
+              <button class="chip-button" id="workspace-desktop-button" type="button" data-i18n="useDesktop" data-i18n-title="useDesktopTitle">放到桌面</button>
+              <button class="chip-button" id="data-import-button" type="button" data-i18n="importFile" data-i18n-title="importTitle">导入</button>
+              <button class="chip-button" id="data-new-button" type="button" data-i18n="newFile" data-i18n-title="newFileTitle">新建</button>
+            </div>
+            <div id="data-file-list" class="data-file-list"></div>
+            <pre id="data-preview" class="data-preview" hidden></pre>
+          </div>
+        </div>
+        <button class="button quiet file-action" id="open-button" data-i18n-title="openTitle">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.4 2.4h5.6v8.4H2.4z"/><path d="M9.6 8.6 13.4 4.8m0 0v2.8m0-2.8h-2.8"/></svg>
+          <span class="button-label" data-i18n="open">打开</span>
+        </button>
+        <button class="button quiet file-action" id="save-button" data-i18n-title="saveTitle">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7.4M4.8 6.6 8 9.8l3.2-3.2"/><path d="M2.6 12.2v1.6h10.8v-1.6"/></svg>
+          <span class="button-label" data-i18n="save">保存</span>
+        </button>
+        <span class="action-divider" aria-hidden="true"></span>
+        <button class="button theme-button" id="theme-button" type="button">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.4"/><path class="icon-fill" d="M8 2.6a5.4 5.4 0 0 1 0 10.8Z"/></svg>
+          <span id="theme-label">纸页</span>
+        </button>
+        <button class="button compile-button" id="compile-button" data-i18n-title="compileTitle">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.6 12.8 6.8 2.6l3 8.4 2-4.4h1.8"/></svg>
+          <span class="button-label" data-i18n="compile">编译</span>
+        </button>
+        <button class="button primary" id="run-button" data-i18n-title="runTitle">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path class="icon-fill" d="M5.2 3.4v9.2L12.6 8 5.2 3.4Z"/></svg>
+          <span class="button-label" data-i18n="run">运行</span>
+        </button>
+        <input id="file-input" type="file" accept=".pseudo,.txt,text/plain" hidden>
+        <input id="data-file-input" type="file" accept=".txt,.dat,.csv,text/plain" hidden>
+      </div>
+    </header>
+
+    <div class="offline-banner" id="offline-banner" hidden data-i18n="offlineBanner">
+      Monaco 无法加载。已切换离线编辑器；补全、编译和运行仍可用。
+    </div>
+
+    <main class="workbench">
+      <aside class="explorer" aria-label="Explorer">
+        <div class="panel-heading" data-i18n="deskFolder">工作夹</div>
+
+        <div class="section-label" data-i18n="program">程序</div>
+        <button class="file-row active" type="button">
+          <span class="file-icon" aria-hidden="true">§</span>
+          <span id="explorer-file-name">main.pseudo</span>
+          <span class="file-row-status" aria-hidden="true"></span>
+        </button>
+
+        <div class="section-label with-rule" data-i18n="examples">示例</div>
+        <div id="example-list" class="example-list"></div>
+      </aside>
+
+      <section class="editor-column">
+        <div class="editor-tabs" role="tablist" aria-label="Open editors">
+          <div class="editor-tab active" role="tab" aria-selected="true">
+            <span class="tab-file-glyph" aria-hidden="true">§</span>
+            <span class="tab-label" id="tab-file-name">main.pseudo</span>
+            <span class="tab-dirty" id="tab-dirty" title="Unsaved changes" aria-label="Unsaved changes"></span>
+          </div>
+          <div class="editor-help" aria-label="Editor shortcuts">
+            <span><kbd>Tab</kbd> <span data-i18n="accept">接受</span></span>
+            <span><kbd>Ctrl</kbd> <kbd>Space</kbd> <span data-i18n="suggest">补全</span></span>
+            <button class="completion-toggle" id="completion-toggle" type="button" role="switch" aria-checked="true" data-i18n-title="completionToggleTitle">
+              <span class="toggle-track" aria-hidden="true"><span class="toggle-knob"></span></span>
+              <span data-i18n="suggest">补全</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="editor-host">
+          <div id="editor" aria-label="Pseudocode editor"></div>
+          <textarea id="fallback-editor" spellcheck="false" aria-label="Pseudocode editor fallback" hidden></textarea>
+        </div>
+
+        <section class="output-panel" id="output-panel" aria-label="Compiler and runtime output">
+          <div class="output-resizer" id="output-resizer" role="separator" aria-orientation="horizontal" data-i18n-title="resizePanelTitle">
+            <span class="output-resizer-grip" aria-hidden="true"></span>
+          </div>
+          <div class="output-tabs" role="tablist" aria-label="Output panels">
+            <button class="output-tab active" data-panel="files" role="tab" data-i18n="filesTab">文件操作</button>
+            <button class="output-tab" data-panel="problems" role="tab"><span data-i18n="problems">问题</span> <span id="problem-count">0</span></button>
+            <button class="output-tab" data-panel="console" role="tab" data-i18n="console">控制台</button>
+            <button class="output-tab" data-panel="python" role="tab">Python</button>
+            <button class="output-tab" data-panel="tokens" role="tab" data-i18n="tokens">词法</button>
+            <span class="compile-state" id="compile-state" data-i18n="ready">就绪</span>
+          </div>
+          <div class="output-body">
+            <div id="files-panel" class="output-view active files-guide" role="tabpanel"></div>
+            <div id="problems-panel" class="output-view" role="tabpanel"></div>
+            <div id="console-panel" class="output-view console-view" role="tabpanel">
+              <section class="stdin-pane" aria-label="Program input">
+                <div class="console-pane-heading">
+                  <span data-i18n="stdin">标准输入</span>
+                  <button class="text-button" id="clear-stdin-button" type="button" data-i18n="clear">清空</button>
+                </div>
+                <div class="entrypoint-hint" id="entrypoint-hint" hidden></div>
+                <textarea id="stdin-input" spellcheck="false" data-i18n-placeholder="stdinPlaceholder"></textarea>
+              </section>
+              <section class="stdout-pane" aria-label="Program output">
+                <div class="console-pane-heading">
+                  <span data-i18n="stdout">程序输出</span>
+                  <span id="run-meta" data-i18n="notRunYet">尚未运行</span>
+                  <button class="mini-run-button" id="console-run-button" type="button"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path class="icon-fill" d="M5.2 3.4v9.2L12.6 8 5.2 3.4Z"/></svg> <span data-i18n="run">运行</span></button>
+                </div>
+                <pre id="console-output" class="console-output" data-i18n="consoleIdle">运行程序后，输出会出现在这里。</pre>
+              </section>
+            </div>
+            <pre id="python-panel" class="output-view code-output" role="tabpanel"></pre>
+            <div id="tokens-panel" class="output-view token-grid" role="tabpanel"></div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span class="status-cluster"><span class="status-dot compact" aria-hidden="true"></span><span id="connection-status" data-i18n="starting">正在启动本地服务…</span></span>
+      <span id="completion-status" class="completion-status" data-i18n="completionWaiting">补全：等待中</span>
+      <span class="status-spacer"></span>
+      <span id="editor-mode" data-i18n="loadingEditor">正在加载编辑器…</span>
+      <span class="desktop-status" data-i18n="spaces">缩进 4</span>
+      <span id="cursor-position">Ln 1, Col 1</span>
+      <span class="language-status">CAIE Pseudocode</span>
+      <span id="workspace-status" class="desktop-status">workspace</span>
+    </footer>
+  </div>
+
+  <noscript>This IDE requires JavaScript.</noscript>
+  <script src="/app.js" defer></script>
+</body>
+</html>

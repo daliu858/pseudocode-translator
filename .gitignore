@@ -1,32 +1,40 @@
-# Python cache
+# Python
 __pycache__/
 *.pyc
+.pytest_cache/
 
-# Past papers & merge scripts
-9702_*.pdf
-9709_*.pdf
-_9702_*
-_9709_*
-_download_merge_*.py
-_probe_*.py
+# ── Copyright guard ─────────────────────────────────────────────────────
+# This public repository must never contain third-party copyrighted
+# material (past papers, mark schemes, official guides, textbooks) or
+# anything derived from it. These patterns are a safety net: the material
+# itself lives outside this repository.
+*.pdf
+*.docx
+*.doc
+*.pseudo
+corpus/
+corpus_*/
+completion_engine/
+incoming/
+docs/references/
+docs/completion-engine/
 
-# Temp documents
+# Local-only research/scratch artifacts
+.q3review/
+.agents/
+.codex/
+tmp/
+_kimi_*
 temp*.docx
 transcript*_output.txt
-
-# Non-compiler project files
 *.png
-模板大师.docx
+*.jpg
 
-# PDF textbooks (too large for git)
-engineering a compiler*.pdf
-(已压缩)engineering a compiler.pdf
-伪代码指南_2-29.pdf
+# IDE user workspace (user files created via OPENFILE/WRITEFILE)
+ide/workspace/
 
-# Word documents
-engineering a compiler*.docx
-
-# NanoBot/CoPaw analysis (keep locally, not in repo)
-analyze_hkuds.py
-HKUDS_Star_Analysis.md
-test_qq_ack_message.py
+# Secrets — never commit credentials of any kind
+*.key
+*.pem
+.env
+.env.*
