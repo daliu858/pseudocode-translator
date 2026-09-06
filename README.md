@@ -221,14 +221,9 @@ licences).
 | `ide/` | Local IDE: Monaco front end + zero-dependency HTTP server + restricted runner |
 | `test_ide_runner.py` / `test_file_handling.py` | IDE service and file-statement tests |
 | `check_architecture.py` | Static module-dependency boundary check (enforced in CI) |
-| `lexgen.py` / `regex_lexer.py` | Lexer-design comparison experiments (research code) |
-| `docs/` | Technical documents (lexer comparison, non-regularity argument) |
 
 ## License
 
-**All rights reserved** for now — no open-source license has been chosen
-yet. Reading and learning are welcome; for copying, modification, or
-redistribution, please contact the maintainer first
-(<pseudocode-translator@protonmail.com> or a GitHub issue). Third-party
-component licences (Monaco Editor, MIT) are listed in
+Released under the [MIT License](LICENSE). Third-party component licences
+(Monaco Editor, MIT) are listed in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

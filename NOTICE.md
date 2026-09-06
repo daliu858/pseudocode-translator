@@ -1,6 +1,6 @@
 # Project Use, Design, and Attribution Notice
 
-Last updated: 29 August 2026
+Last updated: 6 September 2026
 
 ## 1. Purpose and present use
 
@@ -115,9 +115,8 @@ reconstruct, request, or redistribute that corpus.
 
 This file records purpose, attribution, and non-affiliation. It is not a licence
 for the project's original source code, is not legal advice, and does not alter
-the terms of any third-party licence. If the project is later released under an
-open-source licence, that licence should be supplied separately in a `LICENSE`
-file.
+the terms of any third-party licence. The project's original source code is
+released under the MIT License; see [`LICENSE`](LICENSE).
 
 Questions or credible rights concerns should be raised with the repository
 maintainer at <pseudocode-translator@protonmail.com> (or via a GitHub issue)
