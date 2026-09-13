@@ -11,15 +11,16 @@ International Education, e.g. 9618/0478) pseudocode:
 - Pure standard library — **zero third-party Python dependencies**; one
   command to start: `python -m ide.server`.
 
-> **Contact**: for any questions, concerns, or rights complaints, email
-> **<pseudocode-translator@protonmail.com>**. See the
-> [Disclaimer](#disclaimer) below.
-
 > **Note**: ghost-text auto-completion is an **experimental research
 > feature and is not distributed with this repository** (see Disclaimer,
 > item 5). The IDE in this repository runs in compiler-only mode: editing,
 > diagnostics, compile, and run are all available — only AI completion is
 > absent.
+
+> **Contact**: if anything doesn't work, or you have **any** question,
+> concern, or rights complaint about this repository, contact me right away:
+> **<pseudocode-translator@protonmail.com>** (or open a GitHub issue).
+> I will respond and fix it. See the [Disclaimer](#disclaimer) below.
 
 ---
 
@@ -234,15 +235,14 @@ Released under the [MIT License](LICENSE). Third-party component licences
 This repository is the public build of a longer-running private project. If
 something seems missing, it is probably one of these deliberate decisions:
 
-1. **The experimental code-completion engine is not distributed.** Its
-   training corpus contained third-party copyrighted material, so the engine
-   was removed from the public build; the IDE runs compiler-only and
-   `/api/completions` intentionally returns `completion_disabled`. The
-   integration layer and ghost-text UI remain in the source.
-2. **The compiler regression corpus is not distributed** for the same
-   licensing reason. The shipped test suites cover the IDE runner and the
-   CAIE file-handling statements; the compiler core was validated against a
-   local corpus that cannot be published.
+1. **The code-completion engine is not distributed.** It is an experimental
+   research feature and is not part of the public build; the IDE runs
+   compiler-only and `/api/completions` intentionally returns
+   `completion_disabled`. The integration layer and ghost-text UI remain in
+   the source.
+2. **The compiler regression corpus is not distributed** — it belongs to the
+   same experimental development setup. The shipped test suites cover the IDE
+   runner and the CAIE file-handling statements.
 3. **Internal research documents and experiment directories were removed**
    in earlier cleanups; docs referenced from old commits may no longer exist.
 4. **`qq-agent/` is sanitized.** The real deployment's credentials, student
@@ -250,9 +250,3 @@ something seems missing, it is probably one of these deliberate decisions:
    machine-specific paths were replaced by `PSEUDOCODE_COMPILER_ROOT`, and
    `config.example.qq.json` contains placeholders you must fill yourself.
 
-## Contact
-
-If anything doesn't work, or you have **any** concern about this repository
-(rights, licensing, content — anything at all), contact me right away:
-**<pseudocode-translator@protonmail.com>** (also reachable:
-**<mapping_robot@proton.me>**) or open a GitHub issue. I will respond and fix it.
