@@ -221,6 +221,7 @@ licences).
 | `ide/` | Local IDE: Monaco front end + zero-dependency HTTP server + restricted runner |
 | `test_ide_runner.py` / `test_file_handling.py` | IDE service and file-statement tests |
 | `check_architecture.py` | Static module-dependency boundary check (enforced in CI) |
+| `qq-agent/` | The compiler wrapped as an AI-agent tool on QQ (agent prompts, tool wrapper, sanitized config) — see [qq-agent/README.md](qq-agent/README.md) |
 
 ## License
 

@@ -1,0 +1,21 @@
+{
+  "_comment": "Excerpt of the CoPaw/QwenPaw channel config used for the QQ deployment. Fill app_id / client_secret with credentials from the QQ open platform (https://q.qq.com). Never commit real values.",
+  "channels": {
+    "qq": {
+      "enabled": true,
+      "bot_prefix": "",
+      "filter_tool_messages": true,
+      "filter_thinking": true,
+      "dm_policy": "open",
+      "group_policy": "open",
+      "allow_from": [],
+      "deny_message": "",
+      "require_mention": false,
+      "app_id": "<YOUR_QQ_BOT_APP_ID>",
+      "client_secret": "<YOUR_QQ_BOT_CLIENT_SECRET>",
+      "markdown_enabled": false,
+      "max_reconnect_attempts": 100,
+      "ack_message": "⏳ Processing..."
+    }
+  }
+}
