@@ -103,13 +103,11 @@ disabled in this build (see Section 6).
 ## 6. Experimental completion engine (not distributed)
 
 An experimental next-token completion engine was developed as a private
-research exercise. Because its training corpus consisted of third-party
-copyrighted examination material that cannot lawfully be redistributed, the
-engine, its corpus, and its evaluation data are not distributed with this
-repository and are not available on request. The public IDE build runs in
+research exercise. It remains an experimental research feature: the engine,
+its corpus, and its evaluation data are not part of the public build and are
+not distributed with this repository. The public IDE build runs in
 compiler-only mode and returns an explicit `completion_disabled` response
-from its completion endpoint. Nothing in this repository grants any right to
-reconstruct, request, or redistribute that corpus.
+from its completion endpoint.
 
 ## 7. Scope of this notice
 
