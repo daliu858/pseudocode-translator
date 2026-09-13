@@ -182,15 +182,13 @@ constitutes acknowledgement of all terms below.**
 5. **Experimental completion engine not distributed.**
    An **experimental** next-token completion engine (token-category
    trigram fused with parser legality signals) was researched during
-   development. Because its training corpus involved third-party
-   copyrighted material that cannot lawfully be redistributed, the engine
-   and all of its corpora and evaluation data have been **physically
-   removed** from the public repository and are **not available on
-   request**. The public IDE runs in compiler-only mode and returns an
-   explicit disabled response from `/api/completions`. The internal
-   regression test harness used during development is likewise not
-   distributed, for the same reason; the tests retained here (IDE service
-   and file handling) are built entirely on original example programs.
+   development. It remains an experimental research feature and is not
+   part of the public build. The public IDE runs in compiler-only mode
+   and returns an explicit disabled response from `/api/completions`.
+   The internal regression harness used during development is likewise
+   part of that experimental setup and is not distributed; the tests
+   retained here (IDE service and file handling) are built entirely on
+   original example programs.
 
 6. **Provided "AS IS".**
    THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY
