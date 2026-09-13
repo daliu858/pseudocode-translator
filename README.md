@@ -228,3 +228,31 @@ licences).
 Released under the [MIT License](LICENSE). Third-party component licences
 (Monaco Editor, MIT) are listed in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+## What was removed or changed before publishing (read before filing a bug)
+
+This repository is the public build of a longer-running private project. If
+something seems missing, it is probably one of these deliberate decisions:
+
+1. **The experimental code-completion engine is not distributed.** Its
+   training corpus contained third-party copyrighted material, so the engine
+   was removed from the public build; the IDE runs compiler-only and
+   `/api/completions` intentionally returns `completion_disabled`. The
+   integration layer and ghost-text UI remain in the source.
+2. **The compiler regression corpus is not distributed** for the same
+   licensing reason. The shipped test suites cover the IDE runner and the
+   CAIE file-handling statements; the compiler core was validated against a
+   local corpus that cannot be published.
+3. **Internal research documents and experiment directories were removed**
+   in earlier cleanups; docs referenced from old commits may no longer exist.
+4. **`qq-agent/` is sanitized.** The real deployment's credentials, student
+   conversations, media and runtime state are not part of this repository;
+   machine-specific paths were replaced by `PSEUDOCODE_COMPILER_ROOT`, and
+   `config.example.qq.json` contains placeholders you must fill yourself.
+
+## Contact
+
+If anything doesn't work, or you have **any** concern about this repository
+(rights, licensing, content — anything at all), contact me right away:
+**<pseudocode-translator@protonmail.com>** (also reachable:
+**<mapping_robot@proton.me>**) or open a GitHub issue. I will respond and fix it.
