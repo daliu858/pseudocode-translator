@@ -2,6 +2,9 @@
 
 # PRISM — CAIE-style Pseudocode Compiler & Local IDE
 
+> **Author & maintainer:** [daliu858](https://github.com/daliu858) — design, architecture, experiments, review.
+> Development used AI pair programming; those commits are co-authored with Claude, as the contributor list reflects.
+
 ![Pseudocode Studio](assets/banner.jpg)
 
 A **local** compiler + browser IDE for CAIE-style (Cambridge Assessment
