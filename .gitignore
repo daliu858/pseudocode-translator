@@ -38,3 +38,7 @@ ide/workspace/
 *.pem
 .env
 .env.*
+
+# README images
+!assets/banner.jpg
+!assets/architecture.png

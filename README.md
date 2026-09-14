@@ -1,5 +1,7 @@
 # Pseudocode Studio — CAIE-style Pseudocode Compiler & Local IDE
 
+![Pseudocode Studio](assets/banner.jpg)
+
 A **local** compiler + browser IDE for CAIE-style (Cambridge Assessment
 International Education, e.g. 9618/0478) pseudocode:
 
@@ -10,6 +12,8 @@ International Education, e.g. 9618/0478) pseudocode:
   `OPENFILE` / `READFILE` / `WRITEFILE`;
 - Pure standard library — **zero third-party Python dependencies**; one
   command to start: `python -m ide.server`.
+
+![Architecture](assets/architecture.png)
 
 > **Note**: ghost-text auto-completion is an **experimental research
 > feature and is not distributed with this repository** (see Disclaimer,
