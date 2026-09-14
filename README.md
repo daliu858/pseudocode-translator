@@ -1,6 +1,6 @@
-![pseudocode studio](assets/logo.png)
+![PRISM — Pseudocode Runtime & IDE for Student Mastery](assets/logo.png)
 
-# Pseudocode Studio — CAIE-style Pseudocode Compiler & Local IDE
+# PRISM — CAIE-style Pseudocode Compiler & Local IDE
 
 ![Pseudocode Studio](assets/banner.jpg)
 
