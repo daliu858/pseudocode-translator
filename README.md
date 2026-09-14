@@ -1,3 +1,5 @@
+![pseudocode studio](assets/logo.png)
+
 # Pseudocode Studio — CAIE-style Pseudocode Compiler & Local IDE
 
 ![Pseudocode Studio](assets/banner.jpg)
