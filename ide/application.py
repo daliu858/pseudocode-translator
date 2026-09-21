@@ -1338,12 +1338,15 @@ def _buffer_prefix_items(source: str, cursor_offset: int, limit: int) -> list[di
     return items
 
 
-def _has_existing_source_suffix(source: str, cursor_offset: int) -> bool:
-    """Block completion only when the cursor sits inside an existing line.
+_LIVE_LINE_SUFFIX = re.compile(r"""^[\s)\]\}"']*$""")
 
-    End of the current line is a live insertion point even if more statements
-    follow.  Mid-line edits (a non-whitespace rest-of-line) are still paused so
-    the ngram prefix model does not overwrite typed source.
+
+def _has_existing_source_suffix(source: str, cursor_offset: int) -> bool:
+    """Block completion only when real code follows on the same line.
+
+    End of line is live even if more statements follow. Auto-closed `)`, `]`,
+    `}`, and quotes after the cursor (from Monaco bracket pairing) are not
+    treated as old source, so `arr[he|]` can still complete `heap`.
     """
     line_rest = source[cursor_offset:].split("\n", 1)[0].rstrip("\r")
-    return bool(line_rest.strip())
+    return not _LIVE_LINE_SUFFIX.match(line_rest)

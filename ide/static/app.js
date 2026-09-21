@@ -1921,9 +1921,10 @@ OUTPUT total`;
   }
 
   function isAtDocumentFrontier(source, offset) {
-    // End of the current line is live, even if more statements follow.
+    // End of line is live. Auto-closed ] ) } and quotes after the cursor
+    // (Monaco bracket pairing) are not treated as old code.
     const restOfLine = source.slice(offset).split(/\r?\n/, 1)[0];
-    return !restOfLine.trim();
+    return /^[\s)\]\}"']*$/.test(restOfLine);
   }
 
   function triggerInlineSuggest() {

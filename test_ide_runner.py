@@ -238,6 +238,21 @@ class CompletionFrontierTests(unittest.TestCase):
             _has_existing_source_suffix(source, len("DECLARE x : INTEGER"))
         )
 
+    def test_auto_closed_bracket_after_index_is_live(self):
+        from ide.application import _has_existing_source_suffix
+
+        source = "DECLARE heap : INTEGER\nmyLinkedListPointers[he]"
+        offset = source.index("[he]") + len("[he")
+        self.assertEqual(source[offset], "]")
+        self.assertFalse(_has_existing_source_suffix(source, offset))
+
+    def test_auto_closed_paren_is_live(self):
+        from ide.application import _has_existing_source_suffix
+
+        source = "OUTPUT Length(he)"
+        offset = source.index("(he)") + len("(he")
+        self.assertFalse(_has_existing_source_suffix(source, offset))
+
 
 class BufferPrefixCompletionTests(unittest.TestCase):
     def test_te_completes_temp_before_keywords(self):
@@ -254,6 +269,15 @@ class BufferPrefixCompletionTests(unittest.TestCase):
         self.assertTrue(result["items"])
         self.assertEqual(result["items"][0]["label"], "Temp")
         self.assertEqual(result["items"][0]["insertText"], "Temp")
+
+    def test_heap_completes_inside_auto_closed_brackets(self):
+        application = IDEApplication.from_release()
+        source = "DECLARE heap : INTEGER\nmyLinkedListPointers[he]"
+        offset = source.index("[he]") + len("[he")
+        result = application.complete(source, offset)
+        labels = [item["label"] for item in result["items"]]
+        self.assertIn("heap", labels)
+        self.assertEqual(labels[0], "heap")
 
 
 if __name__ == "__main__":
