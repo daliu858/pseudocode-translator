@@ -181,6 +181,80 @@ class IDEHTTPRunTests(unittest.TestCase):
         self.assertTrue(result["tokens"])
         self.assertIn("elapsedMs", result)
 
+    def test_indent_helper_is_served(self):
+        with urlopen(self.base_url + "/indent.js", timeout=5) as response:
+            body = response.read().decode("utf-8")
+        self.assertEqual(response.status, 200)
+        self.assertIn("PseudocodeIndent", body)
+        self.assertIn("increaseIndentPattern", body)
+
+
+class IndentScriptTests(unittest.TestCase):
+    def test_node_self_check(self):
+        import shutil
+        import subprocess
+        from pathlib import Path
+
+        if not shutil.which("node"):
+            self.skipTest("node is not installed")
+        script = Path(__file__).resolve().parent / "ide" / "static" / "indent.js"
+        subprocess.check_call(["node", str(script)])
+
+
+class CompletionFrontierTests(unittest.TestCase):
+    def test_end_of_file_is_live(self):
+        from ide.application import _has_existing_source_suffix
+
+        source = "DECLARE x : INTEGER"
+        self.assertFalse(_has_existing_source_suffix(source, len(source)))
+
+    def test_end_of_line_with_code_below_is_live(self):
+        from ide.application import _has_existing_source_suffix
+
+        source = "DECLARE x : INTEGER\nOUTPUT x"
+        self.assertFalse(
+            _has_existing_source_suffix(source, len("DECLARE x : INTEGER"))
+        )
+
+    def test_crlf_end_of_line_is_live(self):
+        from ide.application import _has_existing_source_suffix
+
+        source = "DECLARE x : INTEGER\r\nOUTPUT x"
+        self.assertFalse(
+            _has_existing_source_suffix(source, len("DECLARE x : INTEGER"))
+        )
+
+    def test_mid_line_is_blocked(self):
+        from ide.application import _has_existing_source_suffix
+
+        source = "DECLARE x : INTEGER"
+        self.assertTrue(_has_existing_source_suffix(source, len("DEC")))
+
+    def test_trailing_spaces_on_line_are_live(self):
+        from ide.application import _has_existing_source_suffix
+
+        source = "DECLARE x : INTEGER   \nOUTPUT x"
+        self.assertFalse(
+            _has_existing_source_suffix(source, len("DECLARE x : INTEGER"))
+        )
+
+
+class BufferPrefixCompletionTests(unittest.TestCase):
+    def test_te_completes_temp_before_keywords(self):
+        from ide.application import _buffer_prefix_items
+
+        source = "Temp <- startPointer\nTe"
+        labels = [item["label"] for item in _buffer_prefix_items(source, len(source), 8)]
+        self.assertEqual(labels[0], "Temp")
+
+    def test_complete_api_offers_temp_without_engine(self):
+        application = IDEApplication.from_release()
+        self.assertFalse(application.completion_available)
+        result = application.complete("Temp <- startPointer\nTe")
+        self.assertTrue(result["items"])
+        self.assertEqual(result["items"][0]["label"], "Temp")
+        self.assertEqual(result["items"][0]["insertText"], "Temp")
+
 
 if __name__ == "__main__":
     unittest.main()

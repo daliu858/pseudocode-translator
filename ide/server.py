@@ -35,6 +35,7 @@ _STATIC_FILES = {
     "/": "index.html",
     "/index.html": "index.html",
     "/app.js": "app.js",
+    "/indent.js": "indent.js",
     "/styles.css": "styles.css",
     "/favicon.svg": "favicon.svg",
 }

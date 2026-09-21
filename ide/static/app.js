@@ -46,6 +46,8 @@
       completionWaiting: "补全：等待中",
       loadingEditor: "正在加载编辑器…",
       spaces: "缩进 4",
+      reindent: "重新缩进",
+      reindentTitle: "按当前块结构重新缩进（Shift+Alt+F）",
       offlineBanner: "Monaco 无法加载。已切换离线编辑器；补全、编译和运行仍可用。",
       noDataFiles: "还没有数据文件。点「导入」或「新建」。",
       emptyPreview: "（空文件）",
@@ -93,9 +95,12 @@ CLOSEFILE "FileB.txt"`,
       serviceError: "服务出错",
       compiled: "已编译",
       problemSummary: "个问题",
-      completionPaused: "补全已暂停：正在改旧代码",
-      completionIdle: "Completion: no safe action",
-      tabNewLine: "Tab: new line",
+      completionPaused: "补全已暂停：光标在一行中间",
+      completionIdle: "补全：暂无安全建议",
+      completionDisabled: "此版本不含补全引擎",
+      completionInComment: "补全：注释内",
+      completionIncomplete: "补全：半截记号",
+      tabNewLine: "Tab: 换行",
       completionUnavailable: "补全不可用",
       runnerLimit: "超过 3 秒运行上限，已停止。",
       truncated: "输出超过 64 KiB，已截断。",
@@ -141,6 +146,8 @@ CLOSEFILE "FileB.txt"`,
       completionWaiting: "Completion: waiting",
       loadingEditor: "Loading editor…",
       spaces: "Spaces: 4",
+      reindent: "Reindent",
+      reindentTitle: "Reindent from IF / WHILE / FOR blocks (Shift+Alt+F)",
       offlineBanner: "Monaco could not be loaded. The offline editor is active; completion, compilation, and execution remain available.",
       noDataFiles: "No data files yet. Import or New.",
       emptyPreview: "(empty)",
@@ -183,8 +190,11 @@ CLOSEFILE "FileB.txt"`,
       serviceError: "Service error",
       compiled: "Compiled",
       problemSummary: "problems",
-      completionPaused: "Completion paused: editing old code",
+      completionPaused: "Completion paused: cursor is mid-line",
       completionIdle: "Completion: no safe action",
+      completionDisabled: "Completion engine is not in this build",
+      completionInComment: "Completion: inside a comment",
+      completionIncomplete: "Completion: incomplete token",
       tabNewLine: "Tab: new line",
       completionUnavailable: "Completion unavailable",
       runnerLimit: "Stopped after the 3-second execution limit.",
@@ -525,6 +535,9 @@ OUTPUT total`;
       } else if (modifier && event.key.toLowerCase() === "s") {
         event.preventDefault();
         saveFile();
+      } else if (event.shiftKey && event.altKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        reindentCurrentEditor();
       }
     });
 
@@ -563,6 +576,17 @@ OUTPUT total`;
     }
   }
 
+  function inlineSuggestOptions(enabled) {
+    return {
+      enabled: !!enabled,
+      showToolbar: "onHover",
+      syntaxHighlightingEnabled: true,
+      suppressSuggestions: false,
+      minShowDelay: 0,
+      experimental: { showOnSuggestConflict: "always" },
+    };
+  }
+
   function applyOutputHeight(height) {
     const column = document.querySelector(".editor-column");
     if (!column) return;
@@ -588,11 +612,12 @@ OUTPUT total`;
     if (state.mode === "monaco" && state.editor) {
       state.editor.updateOptions({
         quickSuggestions: enabled
-          ? { other: true, comments: false, strings: false }
-          : false,
+          ? { other: "on", comments: "off", strings: "off" }
+          : { other: "off", comments: "off", strings: "off" },
+        quickSuggestionsDelay: 10,
         suggestOnTriggerCharacters: enabled,
         tabCompletion: enabled ? "on" : "off",
-        inlineSuggest: { enabled: !!enabled },
+        inlineSuggest: inlineSuggestOptions(enabled),
       });
     }
     if (!enabled) {
@@ -716,24 +741,24 @@ OUTPUT total`;
       tabSize: 4,
       insertSpaces: true,
       detectIndentation: false,
+      autoIndent: "full",
+      formatOnType: false,
       smoothScrolling: true,
       cursorSmoothCaretAnimation: "on",
       renderWhitespace: "selection",
       renderLineHighlight: "all",
       bracketPairColorization: { enabled: true },
-      guides: { bracketPairs: false, indentation: false },
-      quickSuggestions: { other: true, comments: false, strings: false },
+      guides: { bracketPairs: false, indentation: true },
+      quickSuggestions: { other: "on", comments: "off", strings: "off" },
+      quickSuggestionsDelay: 10,
       suggestOnTriggerCharacters: true,
       tabCompletion: "on",
       wordBasedSuggestions: "off",
-      suggest: { selectionMode: "always", preview: true, showStatusBar: true },
-      inlineSuggest: {
-        enabled: true,
-        showToolbar: "onHover",
-        syntaxHighlightingEnabled: true,
-      },
+      suggest: { selectionMode: "always", preview: false, showStatusBar: true },
+      inlineSuggest: inlineSuggestOptions(true),
       scrollBeyondLastLine: false,
       fixedOverflowWidgets: true,
+      overflowWidgetsDomNode: document.body,
     });
 
     state.editor.onDidChangeModelContent(onEditorChanged);
@@ -763,6 +788,11 @@ OUTPUT total`;
       runNow,
     );
     state.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveFile);
+    state.editor.addAction({
+      id: "pseudocode.reindent",
+      label: t("reindent"),
+      run: () => reindentCurrentEditor(),
+    });
     // Keep the paper margin rule glued to the right edge of the (narrowed)
     // line-number gutter instead of a hard-coded pixel offset.
     state.editor.onDidLayoutChange(updateMarginLine);
@@ -795,7 +825,9 @@ OUTPUT total`;
         ],
       },
     });
+    const indent = indentApi();
     monaco.languages.setLanguageConfiguration(LANGUAGE_ID, {
+      wordPattern: /(-?\d*\.\d\w*)|([A-Za-z_][A-Za-z0-9_]*)/,
       comments: { lineComment: "//" },
       brackets: [["(", ")"], ["[", "]"]],
       autoClosingPairs: [
@@ -810,11 +842,38 @@ OUTPUT total`;
         { open: '"', close: '"' },
         { open: "'", close: "'" },
       ],
-      indentationRules: {
-        increaseIndentPattern: /^\s*(IF\b.*\bTHEN|FOR\b.*|WHILE\b.*|REPEAT\b.*|CASE\b.*|PROCEDURE\b.*|FUNCTION\b.*|TYPE\b.*|CLASS\b.*)$/i,
-        decreaseIndentPattern: /^\s*(ELSE|OTHERWISE|ENDIF|NEXT|ENDWHILE|UNTIL|ENDCASE|ENDPROCEDURE|ENDFUNCTION|ENDTYPE|ENDCLASS)\b/i,
-      },
+      indentationRules: indent
+        ? {
+            increaseIndentPattern: indent.increaseIndentPattern(),
+            decreaseIndentPattern: indent.decreaseIndentPattern(),
+            indentNextLinePattern: indent.indentNextLinePattern(),
+          }
+        : undefined,
+      onEnterRules: indent
+        ? [
+            {
+              beforeText: indent.increaseIndentPattern(),
+              afterText: /^\s*$/,
+              action: { indentAction: monaco.languages.IndentAction.Indent },
+            },
+            {
+              beforeText: indent.indentNextLinePattern(),
+              afterText: /^\s*$/,
+              action: { indentAction: monaco.languages.IndentAction.Indent },
+            },
+          ]
+        : [],
+      folding: { offSide: true },
     });
+    if (indent) {
+      monaco.languages.registerDocumentFormattingEditProvider(LANGUAGE_ID, {
+        provideDocumentFormattingEdits(model) {
+          const next = indent.reindent(model.getValue());
+          if (next === model.getValue()) return [];
+          return [{ range: model.getFullModelRange(), text: next }];
+        },
+      });
+    }
     monaco.editor.defineTheme("pseudocode-studio-dark", {
       base: "vs-dark",
       inherit: true,
@@ -844,8 +903,8 @@ OUTPUT total`;
         "editorSuggestWidget.background": "#202A22",
         "editorSuggestWidget.border": "#3F4F44",
         "editorSuggestWidget.selectedBackground": "#24443A",
-        "editorGhostText.foreground": "#5A6659",
-        "editorGhostText.background": "#00000000",
+        "editorGhostText.foreground": "#9EC2B3",
+        "editorGhostText.background": "#1E3A32",
         "editorGhostText.border": "#00000000",
       },
     });
@@ -879,32 +938,38 @@ OUTPUT total`;
         "editorSuggestWidget.border": "#B3A37E",
         "editorSuggestWidget.selectedBackground": "#D9E9E0",
         "editorSuggestWidget.foreground": "#3E372A",
-        "editorGhostText.foreground": "#B4A98E",
-        "editorGhostText.background": "#00000000",
+        "editorGhostText.foreground": "#5A7A6C",
+        "editorGhostText.background": "#E3EFE8",
         "editorGhostText.border": "#00000000",
       },
     });
   }
 
   function registerCompletionProviders(monaco) {
+    const triggerCharacters = [" ", "(", "[", ",", ":", "."];
+    for (let code = 48; code <= 57; code += 1) triggerCharacters.push(String.fromCharCode(code));
+    for (let code = 65; code <= 90; code += 1) triggerCharacters.push(String.fromCharCode(code));
+    for (let code = 97; code <= 122; code += 1) triggerCharacters.push(String.fromCharCode(code));
+    triggerCharacters.push("_");
     monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
-      triggerCharacters: [" ", "(", "[", ",", ":", "."],
+      triggerCharacters,
       async provideCompletionItems(model, position, _context, cancellationToken) {
-        if (!state.completionEnabled) return { suggestions: [] };
+        if (!state.completionEnabled) return { suggestions: [], incomplete: true };
         const source = model.getValue();
         const offset = model.getOffsetAt(position);
-        if (!isAtDocumentFrontier(source, offset)) return { suggestions: [] };
+        if (!isAtDocumentFrontier(source, offset)) return { suggestions: [], incomplete: true };
         try {
           const result = await requestCompletions(source, offset);
-          if (cancellationToken.isCancellationRequested) return { suggestions: [] };
+          if (cancellationToken.isCancellationRequested) return { suggestions: [], incomplete: true };
           renderCompletions(result, source, offset);
           return {
+            incomplete: true,
             suggestions: result.items.map((item, index) => ({
               label: item.label,
               kind: monacoCompletionKind(monaco, item.kind),
               insertText: item.insertText,
-              filterText: item.filterText,
-              range: itemRange(model, monaco, item),
+              filterText: item.filterText || item.label,
+              range: itemRange(model, monaco, item, position),
               sortText: String(index).padStart(4, "0"),
               preselect: index === 0,
               detail: completionDetail(item),
@@ -915,7 +980,7 @@ OUTPUT total`;
           };
         } catch (error) {
           console.warn("Completion request failed", error);
-          return { suggestions: [] };
+          return { suggestions: [], incomplete: true };
         }
       },
     });
@@ -923,25 +988,35 @@ OUTPUT total`;
     if (typeof monaco.languages.registerInlineCompletionsProvider === "function") {
       monaco.languages.registerInlineCompletionsProvider(LANGUAGE_ID, {
         async provideInlineCompletions(model, position, _context, cancellationToken) {
-          if (!state.completionEnabled) return { items: [] };
+          if (!state.completionEnabled) return { items: [], suppressSuggestions: false };
           const source = model.getValue();
           const offset = model.getOffsetAt(position);
-          if (!isAtDocumentFrontier(source, offset)) return { items: [] };
+          if (!isAtDocumentFrontier(source, offset)) {
+            return { items: [], suppressSuggestions: false };
+          }
           try {
             const result = await requestCompletions(source, offset);
             if (cancellationToken.isCancellationRequested || !result.items.length) {
-              return { items: [] };
+              return { items: [], suppressSuggestions: false };
             }
             renderCompletions(result, source, offset);
             const first = result.items[0];
-            // NEWLINE has its own compact inline action hint. Returning it to
-            // Monaco too would render the same prediction twice.
-            if (first.actionKind === "insert_newline") return { items: [] };
+            // NEWLINE is multi-line; Monaco ghost text would fail the
+            // single-line visibility check. The injected decoration is the UI.
+            if (first.actionKind === "insert_newline") {
+              return { items: [], suppressSuggestions: false };
+            }
+            const insertText = first.insertText;
+            if (typeof insertText !== "string" || insertText.includes("\n")) {
+              return { items: [], suppressSuggestions: false };
+            }
             return {
               items: [{
-                insertText: first.insertText,
-                range: itemRange(model, monaco, first),
+                insertText,
+                range: itemRange(model, monaco, first, position),
               }],
+              suppressSuggestions: false,
+              enableForwardStability: true,
             };
           } catch (error) {
             return { items: [] };
@@ -980,12 +1055,72 @@ OUTPUT total`;
       });
     });
     state.editor.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        handleFallbackEnter();
+        return;
+      }
       if (event.key === "Tab") {
         event.preventDefault();
-        handleFallbackTab();
+        if (event.shiftKey) handleFallbackDedent();
+        else handleFallbackTab();
       }
     });
     state.editor.focus();
+  }
+
+  function indentApi() {
+    return window.PseudocodeIndent || null;
+  }
+
+  function reindentCurrentEditor() {
+    const indent = indentApi();
+    if (!indent || !state.editor) return;
+    const current = getEditorValue();
+    const next = indent.reindent(current);
+    if (next === current) return;
+    if (state.mode === "monaco") {
+      const model = state.editor.getModel();
+      const selections = state.editor.getSelections();
+      state.editor.executeEdits("pseudocode-reindent", [{
+        range: model.getFullModelRange(),
+        text: next,
+      }]);
+      if (selections) state.editor.setSelections(selections);
+      state.editor.focus();
+    } else {
+      const start = state.editor.selectionStart;
+      state.editor.value = next;
+      const offset = Math.min(start, next.length);
+      state.editor.setSelectionRange(offset, offset);
+      state.editor.dispatchEvent(new Event("input", { bubbles: true }));
+      state.editor.focus();
+    }
+  }
+
+  function handleFallbackEnter() {
+    const indent = indentApi();
+    const start = state.editor.selectionStart;
+    const end = state.editor.selectionEnd;
+    const value = state.editor.value;
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const lineBeforeCursor = value.slice(lineStart, start);
+    const extra = indent
+      ? indent.indentAfterLine(lineBeforeCursor)
+      : (lineBeforeCursor.match(/^[ \t]*/) || [""])[0];
+    insertFallbackText(start, end, "\n" + extra);
+  }
+
+  function handleFallbackDedent() {
+    const start = state.editor.selectionStart;
+    const value = state.editor.value;
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const match = value.slice(lineStart).match(/^( {1,4}|\t)/);
+    if (!match) return;
+    const remove = match[0].length;
+    insertFallbackText(lineStart, lineStart + remove, "");
+    const cursor = Math.max(lineStart, start - remove);
+    state.editor.setSelectionRange(cursor, cursor);
   }
 
   async function handleFallbackTab() {
@@ -1060,6 +1195,8 @@ OUTPUT total`;
       if (sequence !== state.completionSequence) return;
       if (source !== getEditorValue() || offset !== getCursorOffset()) return;
       renderCompletions(result, source, offset);
+      triggerInlineSuggest();
+      triggerSuggestWidget();
     } catch (error) {
       if (sequence !== state.completionSequence) return;
       renderCompletionError(error);
@@ -1333,6 +1470,7 @@ OUTPUT total`;
     const key = `${cursorOffset}\u0000${source}`;
     if (state.completionCache.has(key)) return state.completionCache.get(key);
     const promise = postJSON("/api/completions", { source, cursorOffset, limit: 8 })
+      .then((result) => mergeBufferPrefix(result, source, cursorOffset))
       .catch((error) => {
         state.completionCache.delete(key);
         throw error;
@@ -1345,19 +1483,78 @@ OUTPUT total`;
     return promise;
   }
 
+  function mergeBufferPrefix(result, source, offset) {
+    if (result && result.items && result.items.length) return result;
+    if (!isAtDocumentFrontier(source, offset)) return result || { items: [] };
+    const items = bufferPrefixItems(source, offset);
+    if (!items.length) return result || { items: [] };
+    return { ...(result || {}), items, fallback: "buffer_prefix" };
+  }
+
+  function bufferPrefixItems(source, offset) {
+    const prefix = source.slice(0, offset);
+    const match = prefix.match(/[A-Za-z_][A-Za-z0-9_]*$/);
+    if (!match) return [];
+    const fragment = match[0];
+    const start = offset - fragment.length;
+    const surrounding = source.slice(0, start) + source.slice(offset);
+    const keywords = ((state.meta && state.meta.keywords) || []).slice();
+    const keywordSet = new Set(keywords.map((name) => String(name).toUpperCase()));
+    const fragmentUpper = fragment.toUpperCase();
+    const items = [];
+    const seen = new Set();
+
+    function add(label, kind, tokenType) {
+      const key = label.toUpperCase();
+      if (seen.has(key) || label === fragment) return;
+      seen.add(key);
+      items.push({
+        label,
+        insertText: label,
+        filterText: label,
+        tokenType,
+        kind,
+        probability: 1,
+        legal: true,
+        replaceStart: start,
+        replaceEnd: offset,
+        partial: true,
+        actionKind: "insert_token",
+      });
+    }
+
+    const identRe = /[A-Za-z_][A-Za-z0-9_]*/g;
+    let found = identRe.exec(surrounding);
+    while (found) {
+      const word = found[0];
+      if (!keywordSet.has(word.toUpperCase()) && word.toUpperCase().startsWith(fragmentUpper)) {
+        add(word, "identifier", "IDENTIFIER");
+      }
+      found = identRe.exec(surrounding);
+    }
+    keywords.sort();
+    keywords.forEach((keyword) => {
+      if (String(keyword).toUpperCase().startsWith(fragmentUpper)) {
+        add(keyword, "keyword", "KEYWORD");
+      }
+    });
+    return items.slice(0, 8);
+  }
+
   function renderCompletions(result, source, offset) {
     state.latestSuggestions = result.items || [];
     state.suggestionContext = { source, offset };
     const first = state.latestSuggestions[0];
     updateNewlineDecoration(first);
     if (!first) {
-      setCompletionStatus(
-        result.fallback === "editing_existing_text"
-          ? t("completionPaused")
-          : result.fallback === "file_operation"
-            ? t("completionFileOp")
-            : t("completionIdle"),
-      );
+      const fallbackKey = {
+        editing_existing_text: "completionPaused",
+        file_operation: "completionFileOp",
+        completion_disabled: "completionDisabled",
+        inside_comment: "completionInComment",
+        incomplete_lexeme: "completionIncomplete",
+      }[result.fallback] || "completionIdle";
+      setCompletionStatus(t(fallbackKey));
       return;
     }
 
@@ -1628,10 +1825,32 @@ OUTPUT total`;
     document.body.classList.toggle("dirty", dirty);
   }
 
-  function itemRange(model, monaco, item) {
+  function itemRange(model, monaco, item, position) {
     const start = model.getPositionAt(item.replaceStart);
     const end = model.getPositionAt(item.replaceEnd);
-    return new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column);
+    const range = new monaco.Range(
+      start.lineNumber,
+      start.column,
+      end.lineNumber,
+      end.column,
+    );
+    if (position && !range.containsPosition(position)) {
+      return new monaco.Range(
+        position.lineNumber,
+        position.column,
+        position.lineNumber,
+        position.column,
+      );
+    }
+    if (range.startLineNumber !== range.endLineNumber && position) {
+      return new monaco.Range(
+        position.lineNumber,
+        position.column,
+        position.lineNumber,
+        position.column,
+      );
+    }
+    return range;
   }
 
   function monacoCompletionKind(monaco, kind) {
@@ -1702,8 +1921,37 @@ OUTPUT total`;
   }
 
   function isAtDocumentFrontier(source, offset) {
-    // A final newline and blank lines are normal EOF whitespace, not old code.
-    return !source.slice(offset).trim();
+    // End of the current line is live, even if more statements follow.
+    const restOfLine = source.slice(offset).split(/\r?\n/, 1)[0];
+    return !restOfLine.trim();
+  }
+
+  function triggerInlineSuggest() {
+    if (state.mode !== "monaco" || !state.editor || state.inlineTriggerLock) return;
+    const first = state.latestSuggestions[0];
+    if (!first || first.actionKind === "insert_newline") return;
+    state.inlineTriggerLock = true;
+    try {
+      state.editor.trigger("pseudocode", "editor.action.inlineSuggest.trigger", undefined);
+    } finally {
+      queueMicrotask(() => {
+        state.inlineTriggerLock = false;
+      });
+    }
+  }
+
+  function triggerSuggestWidget() {
+    if (state.mode !== "monaco" || !state.editor || state.suggestTriggerLock) return;
+    if (!state.latestSuggestions.length) return;
+    if (state.latestSuggestions[0].actionKind === "insert_newline") return;
+    state.suggestTriggerLock = true;
+    try {
+      state.editor.trigger("pseudocode", "editor.action.triggerSuggest", { auto: false });
+    } finally {
+      queueMicrotask(() => {
+        state.suggestTriggerLock = false;
+      });
+    }
   }
 
   function clearIfEditingExistingText() {

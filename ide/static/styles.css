@@ -636,6 +636,10 @@ kbd {
   font-feature-settings: "liga" 0, "calt" 0;
 }
 
+body > .overflowingContentWidgets {
+  z-index: 10000;
+}
+
 .monaco-editor .newline-ghost-decoration {
   padding: 1px 4px;
   border-radius: 3px;

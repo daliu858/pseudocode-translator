@@ -71,6 +71,7 @@ MODEL_FAMILIES = frozenset({
 
 MAX_SOURCE_CHARS = 250_000
 _WORD_AT_CURSOR = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
+_IDENT_IN_SOURCE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 _OPEN_CLASS_LEXEMES = {
     "INTEGER_LITERAL": ("1",),
@@ -394,12 +395,9 @@ class IDEApplication:
 
         started = time.perf_counter()
         if not self.completion_available:
-            return self._completion_payload(
-                [], started,
-                fallback="completion_disabled",
-                reason="experimental completion engine not distributed "
-                       "in this build",
-            )
+            return self._buffer_prefix_completion(
+                source, cursor_offset, limit, started)
+
         if _has_existing_source_suffix(source, cursor_offset):
             return self._completion_payload(
                 [], started, fallback="editing_existing_text")
@@ -748,6 +746,28 @@ class IDEApplication:
             "lexicalErrorCount": len(lexical_errors or []),
             "elapsedMs": round((time.perf_counter() - started) * 1000, 2),
         }
+
+    def _buffer_prefix_completion(
+        self,
+        source: str,
+        cursor_offset: int,
+        limit: int,
+        started: float,
+    ) -> dict:
+        if _has_existing_source_suffix(source, cursor_offset):
+            return self._completion_payload(
+                [], started, fallback="editing_existing_text")
+        prefix = source[:cursor_offset]
+        if _cursor_is_in_comment(prefix):
+            return self._completion_payload([], started, fallback="inside_comment")
+        items = _buffer_prefix_items(source, cursor_offset, limit)
+        return self._completion_payload(
+            items,
+            started,
+            fallback="buffer_prefix" if items else "completion_disabled",
+            reason=None if items else "experimental completion engine not distributed "
+            "in this build",
+        )
 
 
 def _source_family(name: str) -> str:
@@ -1270,11 +1290,60 @@ def _cursor_is_in_comment(prefix: str) -> bool:
     return False
 
 
-def _has_existing_source_suffix(source: str, cursor_offset: int) -> bool:
-    """Only autocomplete before trailing whitespace, never before real code.
+def _buffer_prefix_items(source: str, cursor_offset: int, limit: int) -> list[dict]:
+    """Keyword + in-file identifier prefix match when the ngram engine is absent."""
+    prefix = source[:cursor_offset]
+    fragment_match = _WORD_AT_CURSOR.search(prefix)
+    if not fragment_match:
+        return []
+    fragment = fragment_match.group(0)
+    replace_start = cursor_offset - len(fragment)
+    fragment_upper = fragment.upper()
+    surrounding = source[:replace_start] + source[cursor_offset:]
+    items: list[dict] = []
+    seen: set[str] = set()
 
-    A conventional final newline (or blank lines at EOF) is still the live
-    document frontier.  Only a non-whitespace suffix proves that the cursor is
-    revising existing source.
+    def add(lexeme: str, token_name: str, surface_source: str) -> None:
+        key = lexeme.upper()
+        if key in seen or lexeme == fragment:
+            return
+        seen.add(key)
+        items.append(_suggestion(
+            label=lexeme,
+            insert_text=lexeme,
+            token_name=token_name,
+            probability=1.0,
+            legal=True,
+            replace_start=replace_start,
+            replace_end=cursor_offset,
+            partial=True,
+            surface_source=surface_source,
+        ))
+
+    keyword_names = {name.upper() for name in KEYWORDS}
+    for match in _IDENT_IN_SOURCE.finditer(surrounding):
+        word = match.group(0)
+        if word.upper() in keyword_names:
+            continue
+        if word.upper().startswith(fragment_upper):
+            add(word, "IDENTIFIER", "document_identifier")
+        if len(items) >= limit:
+            return items
+
+    for keyword, token_type in sorted(KEYWORDS.items()):
+        if keyword.startswith(fragment_upper):
+            add(keyword, token_type.name, "keyword_prefix")
+        if len(items) >= limit:
+            return items
+    return items
+
+
+def _has_existing_source_suffix(source: str, cursor_offset: int) -> bool:
+    """Block completion only when the cursor sits inside an existing line.
+
+    End of the current line is a live insertion point even if more statements
+    follow.  Mid-line edits (a non-whitespace rest-of-line) are still paused so
+    the ngram prefix model does not overwrite typed source.
     """
-    return bool(source[cursor_offset:].strip())
+    line_rest = source[cursor_offset:].split("\n", 1)[0].rstrip("\r")
+    return bool(line_rest.strip())
