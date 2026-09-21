@@ -15,8 +15,8 @@ International Education, e.g. 9618/0478) pseudocode:
 - **IDE**: Monaco editor, live diagnostics, generated-Python preview,
   built-in console (stdin/stdout), and a server-side file workspace backing
   `OPENFILE` / `READFILE` / `WRITEFILE`;
-- Pure standard library — **zero third-party Python dependencies**; one
-  command to start: `python -m ide.server`.
+- Pure standard library — **zero third-party Python dependencies**.
+  Windows: double-click `start.bat`. macOS/Linux: `./start.sh`.
 
 ![Architecture](assets/architecture.png)
 
@@ -48,32 +48,41 @@ International Education, e.g. 9618/0478) pseudocode:
 
 ```bash
 git clone https://github.com/daliu858/pesudocode-translator.git
-cd pesudocode-translator
 ```
 
-(Or Download ZIP, extract, and enter the directory.)
+Or on GitHub: **Code → Download ZIP**, then unzip. You should see `start.bat` next to `README.md`.
 
-### 2. Start the IDE server
+### 2. Start the IDE
 
-Run **from the repository root**:
+**Windows (one click)**
+
+1. Open the unzipped (or cloned) folder.
+2. Double-click **`start.bat`**.
+3. Keep the black window open. A browser tab should open at
+   [http://127.0.0.1:8765/](http://127.0.0.1:8765/). If it does not, open that
+   address yourself.
+4. To stop: close the black window, or click it and press Ctrl+C.
+
+Python 3.10+ must already be installed. The script looks for Anaconda, the
+`py` launcher, and `python` on PATH; it ignores the Microsoft Store stub.
+
+**macOS / Linux**
 
 ```bash
+chmod +x start.sh
+./start.sh
+```
+
+Same URL, same rule: leave the terminal running until you are done.
+
+**From a terminal (any OS)**
+
+```bash
+cd pesudocode-translator    # the folder that contains start.bat
 python -m ide.server
 ```
 
-You should see:
-
-```text
-Pseudocode IDE ready at http://127.0.0.1:8765/
-File workspace: <your path>/ide/workspace
-Completion: disabled (experimental engine not distributed in this build;
-compile/run fully available). Press Ctrl+C to stop.
-```
-
-A browser window opens automatically at `http://127.0.0.1:8765/`. If it
-does not, open that address manually.
-
-Useful flags:
+Optional flags (also work with `start.bat`):
 
 ```bash
 python -m ide.server --no-browser          # print the URL only
@@ -129,11 +138,12 @@ python check_architecture.py                            # module boundary check
 
 | Symptom | Fix |
 |---|---|
-| `Address already in use` | Use another port: `python -m ide.server --port 9000` |
+| `Address already in use` | Another IDE is already running, or port 8765 is taken. Close the other window, or run `start.bat --port 9000` |
 | Garbled console output / encoding errors on Windows | Run with `PYTHONIOENCODING=utf-8`, or use Windows Terminal |
 | Editor is a plain textbox | Monaco CDN unreachable (offline); features still work — refresh once online |
 | No code completion | Expected: the completion engine is not distributed (Disclaimer, item 5) |
-| `ModuleNotFoundError: ide` | You must run `python -m ide.server` from the **repository root** |
+| `ModuleNotFoundError: ide` | You must run `python -m ide.server` (or `start.bat` / `./start.sh`) from the **repository root** |
+| `start.bat` cannot find Python | Install Python 3.10+ from python.org and tick **Add python.exe to PATH**. The Microsoft Store stub is not enough. |
 
 ### 7. Security boundaries (local use only)
 
