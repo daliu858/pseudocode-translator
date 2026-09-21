@@ -33,6 +33,19 @@
   --shadow: #00000066;
   --margin-rule: #4a504d;
   --margin-ink: #a87b2d;
+  --vscode-menu-background: #2a2f2d;
+  --vscode-menu-foreground: #e8e4d8;
+  --vscode-menu-selectionBackground: #323836;
+  --vscode-menu-selectionForeground: #e8e4d8;
+  --vscode-menu-separatorBackground: #333836;
+  --vscode-menu-border: #4a504d;
+  --vscode-widget-shadow: #00000066;
+  --vscode-editorSuggestWidget-background: #202a22;
+  --vscode-editorSuggestWidget-foreground: #c7c1ae;
+  --vscode-editorSuggestWidget-border: #3f4f44;
+  --vscode-editorSuggestWidget-selectedBackground: #24443a;
+  --vscode-quickInput-background: #2a2f2d;
+  --vscode-quickInput-foreground: #e8e4d8;
 }
 
 :root[data-theme="ivory-gold"] {
@@ -65,6 +78,19 @@
   --shadow: #00000012;
   --margin-rule: #cfc5a8;
   --margin-ink: #b54248;
+  --vscode-menu-background: #fcf8ec;
+  --vscode-menu-foreground: #211c11;
+  --vscode-menu-selectionBackground: #e5ddc5;
+  --vscode-menu-selectionForeground: #211c11;
+  --vscode-menu-separatorBackground: #cfc5a8;
+  --vscode-menu-border: #aa9e7c;
+  --vscode-widget-shadow: #00000012;
+  --vscode-editorSuggestWidget-background: #fdfaf0;
+  --vscode-editorSuggestWidget-foreground: #3e372a;
+  --vscode-editorSuggestWidget-border: #b3a37e;
+  --vscode-editorSuggestWidget-selectedBackground: #d9e9e0;
+  --vscode-quickInput-background: #fcf8ec;
+  --vscode-quickInput-foreground: #211c11;
 }
 
 * { box-sizing: border-box; }
@@ -636,8 +662,64 @@ kbd {
   font-feature-settings: "liga" 0, "calt" 0;
 }
 
+/* Suggest/parameter widgets are reparented to body so the output panel
+   does not clip them. Keep them above the workbench, below menus. */
 body > .overflowingContentWidgets {
-  z-index: 10000;
+  z-index: 40;
+  pointer-events: none;
+}
+body > .overflowingContentWidgets > * {
+  pointer-events: auto;
+}
+
+.context-view {
+  z-index: 20000 !important;
+}
+
+.monaco-menu {
+  min-width: 220px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-raised) !important;
+  color: var(--text-strong);
+  box-shadow: 0 14px 32px var(--shadow);
+}
+
+.monaco-menu .monaco-action-bar.vertical {
+  background: var(--surface-raised);
+  color: var(--text-strong);
+  padding: 4px 0;
+}
+
+.monaco-menu .action-menu-item {
+  color: var(--text) !important;
+  background: transparent !important;
+}
+
+.monaco-menu .action-item.focused .action-menu-item,
+.monaco-menu .action-item:hover .action-menu-item {
+  color: var(--text-strong) !important;
+  background: var(--surface-hover) !important;
+}
+
+.monaco-menu .keybinding {
+  color: var(--muted) !important;
+}
+
+.monaco-menu .action-item.disabled .action-menu-item {
+  opacity: 0.45;
+}
+
+.quick-input-widget {
+  z-index: 20000 !important;
+  background: var(--surface-raised) !important;
+  border: 1px solid var(--border-strong);
+  color: var(--text-strong);
+}
+
+.suggest-widget {
+  background: var(--surface-raised) !important;
+  border: 1px solid var(--border-strong) !important;
 }
 
 .monaco-editor .newline-ghost-decoration {

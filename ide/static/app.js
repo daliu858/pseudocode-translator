@@ -246,6 +246,7 @@ OUTPUT total`;
     workspace: null,
     completionEnabled: localStorage.getItem(STORAGE_COMPLETION) !== "off",
     outputHeight: null,
+    contextMenuOpen: false,
   };
 
   const dom = {};
@@ -431,6 +432,15 @@ OUTPUT total`;
 
   function bindChrome() {
     const shell = document.querySelector(".app-shell");
+    document.addEventListener("mousedown", (event) => {
+      if (event.button === 2) return;
+      const target = event.target;
+      if (target && target.closest && target.closest(".context-view, .monaco-menu")) return;
+      setContextMenuOpen(false);
+    }, true);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") setContextMenuOpen(false);
+    }, true);
     const sidebarToggle = dom["sidebar-toggle"];
     if (sidebarToggle && shell) {
       const applySidebar = (collapsed) => {
@@ -765,8 +775,12 @@ OUTPUT total`;
     state.editor.onDidChangeCursorPosition(() => {
       updateCursorStatus();
       clearIfEditingExistingText();
-      scheduleCompletions(90);
+      if (!state.contextMenuOpen) scheduleCompletions(90);
     });
+    state.editor.onMouseDown((event) => {
+      if (event.event.rightButton) setContextMenuOpen(true);
+    });
+    state.editor.onContextMenu(() => setContextMenuOpen(true));
     state.editor.onKeyDown((event) => {
       if (event.keyCode !== monaco.KeyCode.Tab) return;
       const first = state.latestSuggestions[0];
@@ -906,6 +920,13 @@ OUTPUT total`;
         "editorGhostText.foreground": "#9EC2B3",
         "editorGhostText.background": "#1E3A32",
         "editorGhostText.border": "#00000000",
+        "menu.background": "#2A2F2D",
+        "menu.foreground": "#E8E4D8",
+        "menu.selectionBackground": "#323836",
+        "menu.selectionForeground": "#E8E4D8",
+        "menu.separatorBackground": "#333836",
+        "menu.border": "#4A504D",
+        "widget.shadow": "#00000066",
       },
     });
     monaco.editor.defineTheme("pseudocode-ivory-gold", {
@@ -941,6 +962,13 @@ OUTPUT total`;
         "editorGhostText.foreground": "#5A7A6C",
         "editorGhostText.background": "#E3EFE8",
         "editorGhostText.border": "#00000000",
+        "menu.background": "#FCF8EC",
+        "menu.foreground": "#211C11",
+        "menu.selectionBackground": "#E5DDC5",
+        "menu.selectionForeground": "#211C11",
+        "menu.separatorBackground": "#CFC5A8",
+        "menu.border": "#AA9E7C",
+        "widget.shadow": "#00000012",
       },
     });
   }
@@ -1166,12 +1194,14 @@ OUTPUT total`;
   }
 
   function scheduleCompletions(delay = 110) {
+    if (state.contextMenuOpen) return;
     clearTimeout(state.completionTimer);
     state.completionTimer = setTimeout(refreshCompletions, delay);
   }
 
   async function refreshCompletions() {
     if (!state.editor) return;
+    if (state.contextMenuOpen) return;
     if (!state.completionEnabled) {
       state.latestSuggestions = [];
       state.suggestionContext = null;
@@ -1927,8 +1957,27 @@ OUTPUT total`;
     return /^[\s)\]\}"']*$/.test(restOfLine);
   }
 
+  function setContextMenuOpen(open) {
+    state.contextMenuOpen = !!open;
+    if (!open) return;
+    clearTimeout(state.completionTimer);
+    dismissEditorPopups();
+  }
+
+  function dismissEditorPopups() {
+    if (state.mode !== "monaco" || !state.editor) return;
+    try {
+      state.editor.trigger("keyboard", "hideSuggestWidget", undefined);
+    } catch (_error) { /* ignore */ }
+    try {
+      state.editor.trigger("keyboard", "editor.action.inlineSuggest.hide", undefined);
+    } catch (_error) { /* ignore */ }
+    updateNewlineDecoration(null);
+  }
+
   function triggerInlineSuggest() {
     if (state.mode !== "monaco" || !state.editor || state.inlineTriggerLock) return;
+    if (state.contextMenuOpen) return;
     const first = state.latestSuggestions[0];
     if (!first || first.actionKind === "insert_newline") return;
     state.inlineTriggerLock = true;
@@ -1943,6 +1992,7 @@ OUTPUT total`;
 
   function triggerSuggestWidget() {
     if (state.mode !== "monaco" || !state.editor || state.suggestTriggerLock) return;
+    if (state.contextMenuOpen) return;
     if (!state.latestSuggestions.length) return;
     if (state.latestSuggestions[0].actionKind === "insert_newline") return;
     state.suggestTriggerLock = true;
