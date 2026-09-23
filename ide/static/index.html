@@ -82,7 +82,17 @@
 
     <main class="workbench">
       <aside class="explorer" aria-label="Explorer">
-        <div class="panel-heading" data-i18n="deskFolder">工作夹</div>
+        <div class="panel-heading">
+          <span data-i18n="deskFolder">工作夹</span>
+          <div class="heading-history">
+            <button class="history-button" id="sidebar-undo" type="button" data-i18n-title="undoTitle" aria-label="撤销" disabled>
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.2 3.4 2.8 6.8l3.4 3.4"/><path d="M3.2 6.8h6.2a3.2 3.2 0 0 1 0 6.4H8"/></svg>
+            </button>
+            <button class="history-button" id="sidebar-redo" type="button" data-i18n-title="redoTitle" aria-label="重做" disabled>
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.8 3.4 13.2 6.8 9.8 10.2"/><path d="M12.8 6.8H6.6a3.2 3.2 0 0 0 0 6.4H8"/></svg>
+            </button>
+          </div>
+        </div>
 
         <div class="section-head">
           <span class="section-label" data-i18n="program">程序</span>
@@ -92,15 +102,7 @@
             <button class="sidebar-button" id="sidebar-save" type="button" data-i18n="save" data-i18n-title="saveTitle">保存</button>
           </div>
         </div>
-        <div class="file-row active" id="program-row">
-          <span class="file-icon" aria-hidden="true">§</span>
-          <span id="explorer-file-name">main.pseudo</span>
-          <input id="explorer-rename-input" class="rename-input" type="text" spellcheck="false" hidden>
-          <button class="row-action" id="sidebar-rename" type="button" data-i18n-title="renameTitle" aria-label="重命名">
-            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 11.5 11 3l2 2-8.5 8.5H2.5v-2Z"/><path d="M9.5 4.5 11.5 6.5"/></svg>
-          </button>
-          <span class="file-row-status" aria-hidden="true"></span>
-        </div>
+        <div id="program-list" class="program-list"></div>
         <p class="section-hint" id="program-hint" data-i18n="programHint"></p>
 
         <button class="section-toggle with-rule" id="examples-toggle" type="button" aria-expanded="false">
@@ -112,12 +114,8 @@
       </aside>
 
       <section class="editor-column">
-        <div class="editor-tabs" role="tablist" aria-label="Open editors">
-          <div class="editor-tab active" role="tab" aria-selected="true">
-            <span class="tab-file-glyph" aria-hidden="true">§</span>
-            <span class="tab-label" id="tab-file-name">main.pseudo</span>
-            <span class="tab-dirty" id="tab-dirty" title="Unsaved changes" aria-label="Unsaved changes"></span>
-          </div>
+        <div class="editor-tabs" aria-label="Open editors">
+          <div class="editor-tab-list" id="editor-tab-list" role="tablist"></div>
           <div class="editor-help" aria-label="Editor shortcuts">
             <span><kbd>Tab</kbd> <span data-i18n="accept">接受</span></span>
             <span><kbd>Ctrl</kbd> <kbd>Space</kbd> <span data-i18n="suggest">补全</span></span>

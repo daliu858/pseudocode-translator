@@ -11,6 +11,7 @@
   const STORAGE_LOCALE = "pseudocode-studio.locale.v1";
   const STORAGE_SIDEBAR = "pseudocode-studio.sidebar.v1";
   const STORAGE_COMPLETION = "pseudocode-studio.completion.v1";
+  const STORAGE_DOCS = "pseudocode-studio.documents.v1";
   const STORAGE_EXAMPLES = "pseudocode-studio.examples.v1";
   const THEME_DARK = "studio-dark";
   const THEME_IVORY = "ivory-gold";
@@ -26,8 +27,11 @@
       deskFolder: "工作夹", program: "程序", dataFiles: "数据文件", examples: "示例",
       newProgram: "新建", newProgramTitle: "新建一份空程序",
       rename: "重命名", renameTitle: "重命名当前程序（双击文件名）",
+      undo: "撤销", undoTitle: "撤销编辑（Ctrl+Z）",
+      redo: "重做", redoTitle: "重做编辑（Ctrl+Y）",
       programHint: "双击名称重命名。保存会按这个文件名下载。",
-      examplesHint: "示例不是文件。点开后会替换当前程序。",
+      examplesHint: "示例不是文件。点开后会新开一份，当前程序还在。",
+      closeProgram: "关闭",
       discardConfirm: "当前程序还有未保存的修改。继续会丢掉这些修改。",
       dataFolder: "数据文件夹",
       dataFolderTitle: "OPENFILE / READFILE / WRITEFILE 使用的本机文件夹",
@@ -131,8 +135,11 @@ CLOSEFILE "FileB.txt"`,
       deskFolder: "Folder", program: "Program", dataFiles: "Data files", examples: "Examples",
       newProgram: "New", newProgramTitle: "Start an empty program",
       rename: "Rename", renameTitle: "Rename this program (double-click the name)",
+      undo: "Undo", undoTitle: "Undo edit (Ctrl+Z)",
+      redo: "Redo", redoTitle: "Redo edit (Ctrl+Y)",
       programHint: "Double-click the name to rename. Save downloads that file name.",
-      examplesHint: "Examples are not files. Opening one replaces the current program.",
+      examplesHint: "Examples are not files. Opening one adds another program and keeps the current one.",
+      closeProgram: "Close",
       discardConfirm: "This program has unsaved changes. Continue and discard them?",
       dataFolder: "Data folder",
       dataFolderTitle: "Local folder used by OPENFILE / READFILE / WRITEFILE",
@@ -238,7 +245,9 @@ OUTPUT total`;
     monaco: null,
     editor: null,
     mode: "starting",
-    fileName: localStorage.getItem(STORAGE_FILE) || "main.pseudo",
+    documents: [],
+    activeId: null,
+    fileName: "main.pseudo",
     dirty: false,
     suppressChange: false,
     completionTimer: null,
@@ -270,10 +279,10 @@ OUTPUT total`;
     applyLocale(false);
     bindChrome();
     dom["stdin-input"].value = localStorage.getItem(STORAGE_STDIN) || "";
-    setFileName(state.fileName);
+    loadDocumentSession(localStorage.getItem(STORAGE_SOURCE) || DEFAULT_SOURCE);
     if (dom["compile-state"]) dom["compile-state"].textContent = t("ready");
 
-    let initialSource = localStorage.getItem(STORAGE_SOURCE) || DEFAULT_SOURCE;
+    const initialSource = activeDocument().source;
     try {
       state.meta = await getJSON("/api/meta");
       renderMetadata(state.meta);
@@ -298,7 +307,7 @@ OUTPUT total`;
 
   function cacheDom() {
     [
-      "service-dot", "file-name", "explorer-file-name", "tab-file-name",
+      "service-dot", "file-name",
       "open-button", "save-button", "compile-button", "run-button", "file-input",
       "theme-button", "theme-label", "offline-banner", "example-list", "editor",
       "fallback-editor", "problem-count", "compile-state", "problems-panel",
@@ -311,7 +320,8 @@ OUTPUT total`;
       "files-panel", "files-blurb", "locale-zh", "locale-en",
       "workspace-open-trigger", "workspace-popover", "sidebar-toggle",
       "completion-toggle", "output-resizer",
-      "program-row", "explorer-rename-input", "sidebar-new", "sidebar-rename",
+      "program-list", "editor-tab-list", "sidebar-new",
+      "sidebar-undo", "sidebar-redo",
       "sidebar-open", "sidebar-save", "examples-toggle", "examples-hint",
     ].forEach((id) => {
       dom[id] = document.getElementById(id);
@@ -414,10 +424,7 @@ OUTPUT total`;
       (item) => item.name === "Copy text file",
     );
     if (!example) return;
-    if (!confirmDiscard()) return;
-    setEditorValue(example.code);
-    setFileName("copy-text-file.pseudo");
-    setDirty(true);
+    openDocument(example.code, "copy-text-file.pseudo", true);
     compileNow(true);
   }
 
@@ -435,10 +442,7 @@ OUTPUT total`;
       button.className = "example-row";
       button.textContent = exampleLabel(example);
       button.addEventListener("click", () => {
-        if (!confirmDiscard()) return;
-        setEditorValue(example.code);
-        setFileName(`${slugify(example.name)}.pseudo`);
-        setDirty(true);
+        openDocument(example.code, `${slugify(example.name)}.pseudo`, true);
         compileNow(true);
       });
       dom["example-list"].append(button);
@@ -522,35 +526,22 @@ OUTPUT total`;
     if (dom["sidebar-new"]) {
       dom["sidebar-new"].addEventListener("click", newProgram);
     }
-    if (dom["sidebar-rename"]) {
-      dom["sidebar-rename"].addEventListener("mousedown", (event) => {
-        event.preventDefault();
-      });
-      dom["sidebar-rename"].addEventListener("click", (event) => {
-        event.stopPropagation();
-        beginRename();
+    if (dom["sidebar-undo"]) {
+      dom["sidebar-undo"].addEventListener("click", () => editHistory("undo"));
+    }
+    if (dom["sidebar-redo"]) {
+      dom["sidebar-redo"].addEventListener("click", () => editHistory("redo"));
+    }
+    if (dom["program-list"]) {
+      dom["program-list"].addEventListener("click", onProgramListClick);
+      dom["program-list"].addEventListener("dblclick", (event) => {
+        const row = event.target.closest(".file-row");
+        if (!row || event.target.closest("input, button")) return;
+        beginRename(row.dataset.docId);
       });
     }
-    if (dom["program-row"]) {
-      dom["program-row"].addEventListener("dblclick", (event) => {
-        if (event.target === dom["explorer-rename-input"]) return;
-        if (event.target.closest && event.target.closest("#sidebar-rename")) return;
-        beginRename();
-      });
-    }
-    if (dom["explorer-rename-input"]) {
-      dom["explorer-rename-input"].addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          commitRename();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          cancelRename();
-        }
-      });
-      dom["explorer-rename-input"].addEventListener("blur", () => {
-        if (!dom["explorer-rename-input"].hidden) commitRename();
-      });
+    if (dom["editor-tab-list"]) {
+      dom["editor-tab-list"].addEventListener("click", onEditorTabClick);
     }
     if (dom["examples-toggle"]) {
       const open = localStorage.getItem(STORAGE_EXAMPLES) === "open";
@@ -793,9 +784,11 @@ OUTPUT total`;
     registerPseudocodeLanguage(monaco);
     registerCompletionProviders(monaco);
 
+    state.documents.forEach((doc) => {
+      doc.model = monaco.editor.createModel(doc.source, LANGUAGE_ID);
+    });
     state.editor = monaco.editor.create(dom.editor, {
-      value: initialSource,
-      language: LANGUAGE_ID,
+      model: activeDocument().model,
       theme: monacoThemeName(state.theme),
       automaticLayout: true,
       fontFamily: "Inconsolata, Cascadia Code, SFMono-Regular, Consolas, Liberation Mono, monospace",
@@ -873,6 +866,7 @@ OUTPUT total`;
     dom["fallback-editor"].hidden = true;
     dom.editor.hidden = false;
     state.editor.focus();
+    refreshHistoryButtons();
   }
 
   function registerPseudocodeLanguage(monaco) {
@@ -1146,7 +1140,7 @@ OUTPUT total`;
     state.editor = dom["fallback-editor"];
     dom.editor.hidden = true;
     state.editor.hidden = false;
-    state.editor.value = initialSource;
+    state.editor.value = activeDocument().source;
     dom["offline-banner"].hidden = false;
     dom["editor-mode"].textContent = t("offlineEditor");
     state.editor.addEventListener("input", onEditorChanged);
@@ -1259,10 +1253,11 @@ OUTPUT total`;
   function onEditorChanged() {
     if (state.suppressChange) return;
     updateNewlineDecoration(null);
-    localStorage.setItem(STORAGE_SOURCE, getEditorValue());
     setDirty(true);
+    persistDocuments();
     updateCursorStatus();
     clearIfEditingExistingText();
+    refreshHistoryButtons();
     scheduleCompletions(110);
     scheduleDiagnostics(550);
   }
@@ -1861,8 +1856,11 @@ OUTPUT total`;
       state.editor.setSelectionRange(0, 0);
     }
     state.suppressChange = false;
+    const doc = activeDocument();
+    if (doc) doc.source = source;
     localStorage.setItem(STORAGE_SOURCE, source);
     updateCursorStatus();
+    refreshHistoryButtons();
     scheduleCompletions(20);
     scheduleDiagnostics(50);
   }
@@ -1888,48 +1886,318 @@ OUTPUT total`;
     dom["cursor-position"].textContent = `Ln ${lines.length}, Col ${lines[lines.length - 1].length + 1}`;
   }
 
+  function editHistory(action) {
+    if (state.mode === "monaco" && state.editor) {
+      const model = state.editor.getModel();
+      if (model && typeof model[action] === "function") model[action]();
+      state.editor.focus();
+    } else if (state.mode === "fallback" && state.editor) {
+      state.editor.focus();
+      document.execCommand(action);
+    }
+    refreshHistoryButtons();
+  }
+
+  function refreshHistoryButtons() {
+    let canUndo = false;
+    let canRedo = false;
+    if (state.mode === "monaco" && state.editor) {
+      const model = state.editor.getModel();
+      canUndo = !!(model && typeof model.canUndo === "function" && model.canUndo());
+      canRedo = !!(model && typeof model.canRedo === "function" && model.canRedo());
+    }
+    if (dom["sidebar-undo"]) dom["sidebar-undo"].disabled = !canUndo;
+    if (dom["sidebar-redo"]) dom["sidebar-redo"].disabled = !canRedo;
+  }
+
+  function documentId() {
+    return Math.random().toString(36).slice(2, 10);
+  }
+
+  function activeDocument() {
+    return state.documents.find((doc) => doc.id === state.activeId) || state.documents[0];
+  }
+
+  function loadDocumentSession(fallbackSource) {
+    let documents = null;
+    let activeId = null;
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_DOCS) || "null");
+      if (saved && Array.isArray(saved.documents) && saved.documents.length) {
+        documents = saved.documents.map((doc) => ({
+          id: String(doc.id || documentId()),
+          name: sanitiseFileName(doc.name || "main.pseudo"),
+          source: typeof doc.source === "string" ? doc.source : "",
+          dirty: !!doc.dirty,
+          model: null,
+        }));
+        activeId = documents.some((doc) => doc.id === saved.activeId)
+          ? saved.activeId
+          : documents[0].id;
+      }
+    } catch (_error) {
+      documents = null;
+    }
+    if (!documents) {
+      const id = documentId();
+      documents = [{
+        id,
+        name: sanitiseFileName(localStorage.getItem(STORAGE_FILE) || "main.pseudo"),
+        source: fallbackSource,
+        dirty: false,
+        model: null,
+      }];
+      activeId = id;
+    }
+    state.documents = documents;
+    state.activeId = activeId;
+    const current = activeDocument();
+    state.fileName = current.name;
+    state.dirty = current.dirty;
+    if (dom["file-name"]) dom["file-name"].textContent = current.name;
+    document.body.classList.toggle("dirty", current.dirty);
+    renderOpenDocuments();
+  }
+
+  function persistDocuments() {
+    const current = activeDocument();
+    if (current && state.editor) current.source = getEditorValue();
+    localStorage.setItem(STORAGE_DOCS, JSON.stringify({
+      activeId: state.activeId,
+      documents: state.documents.map((doc) => ({
+        id: doc.id,
+        name: doc.name,
+        source: doc.source,
+        dirty: doc.dirty,
+      })),
+    }));
+    if (current) {
+      localStorage.setItem(STORAGE_SOURCE, current.source);
+      localStorage.setItem(STORAGE_FILE, current.name);
+    }
+  }
+
+  function unusedProgramName() {
+    const used = new Set(state.documents.map((doc) => doc.name.toLowerCase()));
+    if (!used.has("main.pseudo")) return "main.pseudo";
+    let index = 2;
+    while (used.has(`program-${index}.pseudo`)) index += 1;
+    return `program-${index}.pseudo`;
+  }
+
+  function ensureModel(doc) {
+    if (state.mode !== "monaco" || !state.monaco) return null;
+    if (!doc.model) doc.model = state.monaco.editor.createModel(doc.source, LANGUAGE_ID);
+    return doc.model;
+  }
+
+  function openDocument(source, name, dirty) {
+    const doc = {
+      id: documentId(),
+      name: sanitiseFileName(name),
+      source,
+      dirty: !!dirty,
+      model: null,
+    };
+    ensureModel(doc);
+    state.documents.push(doc);
+    activateDocument(doc.id);
+  }
+
+  function activateDocument(id) {
+    if (!state.documents.some((doc) => doc.id === id)) return;
+    if (id === state.activeId && state.editor) return;
+    if (state.editor && state.activeId && state.activeId !== id) {
+      const previous = activeDocument();
+      if (previous) previous.source = getEditorValue();
+    }
+    state.activeId = id;
+    const doc = activeDocument();
+    state.suppressChange = true;
+    if (state.mode === "monaco" && state.editor) {
+      state.editor.setModel(ensureModel(doc));
+    } else if (state.editor) {
+      state.editor.value = doc.source;
+    }
+    state.suppressChange = false;
+    state.fileName = doc.name;
+    if (dom["file-name"]) dom["file-name"].textContent = doc.name;
+    setDirty(doc.dirty);
+    renderOpenDocuments();
+    persistDocuments();
+    updateCursorStatus();
+    refreshHistoryButtons();
+    updateNewlineDecoration(null);
+    scheduleCompletions(20);
+    scheduleDiagnostics(80);
+  }
+
+  function closeDocument(id) {
+    if (state.documents.length < 2) return;
+    const doc = state.documents.find((item) => item.id === id);
+    if (!doc) return;
+    if (doc.dirty && !window.confirm(t("discardConfirm"))) return;
+    if (doc.model) {
+      doc.model.dispose();
+      doc.model = null;
+    }
+    const index = state.documents.findIndex((item) => item.id === id);
+    state.documents.splice(index, 1);
+    if (state.activeId === id) {
+      const next = state.documents[Math.max(0, index - 1)];
+      activateDocument(next.id);
+      return;
+    }
+    renderOpenDocuments();
+    persistDocuments();
+  }
+
+  function renderOpenDocuments() {
+    const list = dom["program-list"];
+    const tabs = dom["editor-tab-list"];
+    if (list) list.replaceChildren();
+    if (tabs) tabs.replaceChildren();
+    state.documents.forEach((doc) => {
+      const active = doc.id === state.activeId;
+      if (list) list.append(programRow(doc, active));
+      if (tabs) tabs.append(editorTab(doc, active));
+    });
+  }
+
+  function programRow(doc, active) {
+    const row = document.createElement("div");
+    row.className = `file-row${active ? " active" : ""}${doc.dirty ? " dirty-doc" : ""}`;
+    row.dataset.docId = doc.id;
+    const label = document.createElement("span");
+    label.className = "file-label";
+    label.textContent = doc.name;
+    const input = document.createElement("input");
+    input.className = "rename-input";
+    input.type = "text";
+    input.spellcheck = false;
+    input.hidden = true;
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        commitRename(doc.id, input.value);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        input.hidden = true;
+        label.hidden = false;
+      }
+    });
+    input.addEventListener("blur", () => {
+      if (!input.hidden) commitRename(doc.id, input.value);
+    });
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.className = "row-action row-rename";
+    rename.title = t("renameTitle");
+    rename.setAttribute("aria-label", t("rename"));
+    rename.innerHTML = '<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 11.5 11 3l2 2-8.5 8.5H2.5v-2Z"/><path d="M9.5 4.5 11.5 6.5"/></svg>';
+    rename.addEventListener("mousedown", (event) => event.preventDefault());
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "row-close";
+    close.textContent = "\u00d7";
+    close.title = t("closeProgram");
+    close.hidden = state.documents.length < 2;
+    const status = document.createElement("span");
+    status.className = "file-row-status";
+    row.append(label, input, rename, close, status);
+    return row;
+  }
+
+  function editorTab(doc, active) {
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = `editor-tab${active ? " active" : ""}${doc.dirty ? " dirty-doc" : ""}`;
+    tab.dataset.docId = doc.id;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(active));
+    const label = document.createElement("span");
+    label.className = "tab-label";
+    label.textContent = doc.name;
+    const dirty = document.createElement("span");
+    dirty.className = "tab-dirty";
+    const close = document.createElement("span");
+    close.className = "row-close";
+    close.dataset.action = "close";
+    close.textContent = "\u00d7";
+    close.title = t("closeProgram");
+    if (state.documents.length < 2) close.hidden = true;
+    tab.append(label, dirty, close);
+    return tab;
+  }
+
+  function onProgramListClick(event) {
+    const row = event.target.closest(".file-row");
+    if (!row) return;
+    const id = row.dataset.docId;
+    if (event.target.closest(".row-close")) {
+      closeDocument(id);
+      return;
+    }
+    if (event.target.closest(".row-rename")) {
+      beginRename(id);
+      return;
+    }
+    activateDocument(id);
+  }
+
+  function onEditorTabClick(event) {
+    const tab = event.target.closest(".editor-tab");
+    if (!tab) return;
+    const id = tab.dataset.docId;
+    if (event.target.closest("[data-action='close']")) {
+      closeDocument(id);
+      return;
+    }
+    activateDocument(id);
+  }
+
   function confirmDiscard() {
     if (!state.dirty) return true;
     return window.confirm(t("discardConfirm"));
   }
 
   function newProgram() {
-    if (!confirmDiscard()) return;
-    cancelRename();
-    setEditorValue("");
-    setFileName("main.pseudo");
-    setDirty(true);
-    if (state.mode === "monaco" && state.editor) state.editor.focus();
+    openDocument("", unusedProgramName(), true);
+    if (state.editor) state.editor.focus();
   }
 
-  function beginRename() {
-    const input = dom["explorer-rename-input"];
-    const label = dom["explorer-file-name"];
+  function beginRename(id) {
+    if (id && id !== state.activeId) activateDocument(id);
+    const row = dom["program-list"] && dom["program-list"].querySelector(
+      `[data-doc-id="${state.activeId}"]`,
+    );
+    if (!row) return;
+    const input = row.querySelector(".rename-input");
+    const label = row.querySelector(".file-label");
     if (!input || !label) return;
-    input.value = state.fileName;
-    input.hidden = false;
+    input.value = activeDocument().name;
     label.hidden = true;
+    input.hidden = false;
     input.focus();
     input.select();
   }
 
-  function cancelRename() {
-    const input = dom["explorer-rename-input"];
-    const label = dom["explorer-file-name"];
-    if (!input || !label) return;
-    input.hidden = true;
-    label.hidden = false;
-  }
-
-  function commitRename() {
-    const input = dom["explorer-rename-input"];
-    if (!input || input.hidden) return;
-    const next = normaliseProgramName(input.value);
-    cancelRename();
-    if (next && next !== state.fileName) {
-      setFileName(next);
-      setDirty(true);
+  function commitRename(id, value) {
+    const doc = state.documents.find((item) => item.id === id);
+    if (!doc) return;
+    const next = normaliseProgramName(value);
+    if (next && next !== doc.name) {
+      doc.name = next;
+      doc.dirty = true;
+      if (doc.id === state.activeId) {
+        state.fileName = next;
+        if (dom["file-name"]) dom["file-name"].textContent = next;
+        state.dirty = true;
+        document.body.classList.add("dirty");
+      }
     }
+    renderOpenDocuments();
+    persistDocuments();
   }
 
   function normaliseProgramName(name) {
@@ -1950,16 +2218,9 @@ OUTPUT total`;
   async function openSelectedFile() {
     const file = dom["file-input"].files && dom["file-input"].files[0];
     if (!file) return;
-    if (!confirmDiscard()) {
-      dom["file-input"].value = "";
-      return;
-    }
     try {
       const source = await file.text();
-      cancelRename();
-      setEditorValue(source);
-      setFileName(file.name || "main.pseudo");
-      setDirty(false);
+      openDocument(source, file.name || "main.pseudo", false);
       compileNow(true);
     } finally {
       dom["file-input"].value = "";
@@ -1981,16 +2242,23 @@ OUTPUT total`;
   }
 
   function setFileName(name) {
-    state.fileName = sanitiseFileName(name);
-    ["file-name", "explorer-file-name", "tab-file-name"].forEach((id) => {
-      dom[id].textContent = state.fileName;
-    });
-    localStorage.setItem(STORAGE_FILE, state.fileName);
+    const cleaned = sanitiseFileName(name);
+    state.fileName = cleaned;
+    const doc = activeDocument();
+    if (doc) doc.name = cleaned;
+    if (dom["file-name"]) dom["file-name"].textContent = cleaned;
+    renderOpenDocuments();
+    persistDocuments();
   }
 
   function setDirty(dirty) {
-    state.dirty = dirty;
-    document.body.classList.toggle("dirty", dirty);
+    state.dirty = !!dirty;
+    const doc = activeDocument();
+    if (doc) doc.dirty = state.dirty;
+    document.body.classList.toggle("dirty", state.dirty);
+    document.querySelectorAll(`[data-doc-id="${state.activeId}"]`).forEach((element) => {
+      element.classList.toggle("dirty-doc", state.dirty);
+    });
   }
 
   function itemRange(model, monaco, item, position) {
