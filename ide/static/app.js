@@ -10,6 +10,7 @@
   const STORAGE_STDIN = "pseudocode-studio.stdin.v1";
   const STORAGE_LOCALE = "pseudocode-studio.locale.v1";
   const STORAGE_SIDEBAR = "pseudocode-studio.sidebar.v1";
+  const STORAGE_SIDEBAR_WIDTH = "pseudocode-studio.sidebarWidth.v1";
   const STORAGE_COMPLETION = "pseudocode-studio.completion.v1";
   const STORAGE_DOCS = "pseudocode-studio.documents.v1";
   const STORAGE_EXAMPLES = "pseudocode-studio.examples.v1";
@@ -37,6 +38,7 @@
       dataFolderTitle: "OPENFILE / READFILE / WRITEFILE 使用的本机文件夹",
       openFolder: "打开文件夹", useDesktop: "放到桌面", importFile: "导入", newFile: "新建",
       collapseSidebar: "收起侧栏", expandSidebar: "展开侧栏",
+      sidebarResizeTitle: "拖动调整侧栏宽度",
       completionToggleTitle: "打开或关闭代码补全",
       completionOff: "补全：已关闭",
       completionFileOp: "补全已停：文件操作语料不足",
@@ -145,6 +147,7 @@ CLOSEFILE "FileB.txt"`,
       dataFolderTitle: "Local folder used by OPENFILE / READFILE / WRITEFILE",
       openFolder: "Open folder", useDesktop: "Desktop", importFile: "Import", newFile: "New",
       collapseSidebar: "Collapse sidebar", expandSidebar: "Expand sidebar",
+      sidebarResizeTitle: "Drag to resize the sidebar",
       completionToggleTitle: "Turn code completion on or off",
       completionOff: "Completion: off",
       completionFileOp: "Completion off: file operations (sparse training data)",
@@ -319,7 +322,7 @@ OUTPUT total`;
       "data-file-list", "data-preview", "data-file-input", "workspace-status",
       "files-panel", "files-blurb", "locale-zh", "locale-en",
       "workspace-open-trigger", "workspace-popover", "sidebar-toggle",
-      "completion-toggle", "output-resizer",
+      "completion-toggle", "output-resizer", "sidebar-resizer",
       "program-list", "editor-tab-list", "sidebar-new",
       "sidebar-undo", "sidebar-redo",
       "sidebar-open", "sidebar-save", "examples-toggle", "examples-hint",
@@ -470,13 +473,41 @@ OUTPUT total`;
           "aria-label",
           t(collapsed ? "expandSidebar" : "collapseSidebar"),
         );
-        if (state.editor && state.mode === "monaco") state.editor.layout();
+        if (state.editor && state.mode === "monaco") scheduleEditorLayout();
       };
+      const savedWidth = Number(localStorage.getItem(STORAGE_SIDEBAR_WIDTH));
+      if (Number.isFinite(savedWidth) && savedWidth > 0) applySidebarWidth(savedWidth);
       applySidebar(localStorage.getItem(STORAGE_SIDEBAR) === "collapsed");
       sidebarToggle.addEventListener("click", () => {
         const collapsed = !shell.classList.contains("sidebar-collapsed");
         localStorage.setItem(STORAGE_SIDEBAR, collapsed ? "collapsed" : "open");
         applySidebar(collapsed);
+      });
+    }
+    const sidebarResizer = dom["sidebar-resizer"];
+    if (sidebarResizer && shell) {
+      sidebarResizer.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || shell.classList.contains("sidebar-collapsed")) return;
+        event.preventDefault();
+        const startX = event.clientX;
+        const startWidth = state.sidebarWidth || 220;
+        sidebarResizer.classList.add("dragging");
+        document.body.classList.add("sidebar-resizing");
+        sidebarResizer.setPointerCapture(event.pointerId);
+        const onMove = (moveEvent) => {
+          applySidebarWidth(startWidth + (moveEvent.clientX - startX));
+        };
+        const onUp = () => {
+          sidebarResizer.classList.remove("dragging");
+          document.body.classList.remove("sidebar-resizing");
+          sidebarResizer.removeEventListener("pointermove", onMove);
+          sidebarResizer.removeEventListener("pointerup", onUp);
+          sidebarResizer.removeEventListener("pointercancel", onUp);
+          applySidebarWidth(state.sidebarWidth || startWidth, true);
+        };
+        sidebarResizer.addEventListener("pointermove", onMove);
+        sidebarResizer.addEventListener("pointerup", onUp);
+        sidebarResizer.addEventListener("pointercancel", onUp);
       });
     }
     const completionToggle = dom["completion-toggle"];
@@ -586,6 +617,7 @@ OUTPUT total`;
         window.alert(error.message);
       }
     });
+    window.addEventListener("beforeunload", persistDocuments);
     window.addEventListener("keydown", (event) => {
       const modifier = event.ctrlKey || event.metaKey;
       if (modifier && event.shiftKey && event.key === "Enter") {
@@ -658,7 +690,26 @@ OUTPUT total`;
     const clamped = Math.round(Math.min(max, Math.max(min, height)));
     state.outputHeight = clamped;
     column.style.setProperty("--output-height", `${clamped}px`);
-    if (state.mode === "monaco" && state.editor) state.editor.layout();
+    scheduleEditorLayout();
+  }
+
+  function scheduleEditorLayout() {
+    if (state.layoutFrame) return;
+    state.layoutFrame = requestAnimationFrame(() => {
+      state.layoutFrame = 0;
+      if (state.mode === "monaco" && state.editor) state.editor.layout();
+    });
+  }
+
+  function applySidebarWidth(width, persist = false) {
+    const workbench = document.querySelector(".workbench");
+    if (!workbench) return;
+    const max = Math.max(180, Math.round(window.innerWidth * 0.46));
+    const clamped = Math.round(Math.min(max, Math.max(168, width)));
+    state.sidebarWidth = clamped;
+    workbench.style.setProperty("--sidebar-width", `${clamped}px`);
+    if (persist) localStorage.setItem(STORAGE_SIDEBAR_WIDTH, String(clamped));
+    scheduleEditorLayout();
   }
 
   function applyCompletionEnabled(enabled, persist = true) {
@@ -793,6 +844,7 @@ OUTPUT total`;
       automaticLayout: true,
       fontFamily: "Inconsolata, Cascadia Code, SFMono-Regular, Consolas, Liberation Mono, monospace",
       fontSize: 14,
+      mouseWheelZoom: true,
       lineHeight: 22,
       // Keep ASCII operators visually honest. Cascadia Code otherwise draws
       // `!=` as a single `≠` ligature even though the source still contains
@@ -807,8 +859,8 @@ OUTPUT total`;
       detectIndentation: false,
       autoIndent: "full",
       formatOnType: false,
-      smoothScrolling: true,
-      cursorSmoothCaretAnimation: "on",
+      smoothScrolling: false,
+      cursorSmoothCaretAnimation: "off",
       renderWhitespace: "selection",
       renderLineHighlight: "line",
       bracketPairColorization: { enabled: true },
@@ -829,7 +881,10 @@ OUTPUT total`;
     state.editor.onDidChangeCursorPosition(() => {
       updateCursorStatus();
       clearIfEditingExistingText();
-      if (!state.contextMenuOpen) scheduleCompletions(90);
+      if (!state.contextMenuOpen) {
+        state.suggestOnComplete = false;
+        scheduleCompletions(80);
+      }
     });
     state.editor.onMouseDown((event) => {
       if (event.event.rightButton) setContextMenuOpen(true);
@@ -1254,11 +1309,12 @@ OUTPUT total`;
     if (state.suppressChange) return;
     updateNewlineDecoration(null);
     setDirty(true);
-    persistDocuments();
+    persistDocumentsSoon();
     updateCursorStatus();
     clearIfEditingExistingText();
     refreshHistoryButtons();
-    scheduleCompletions(110);
+    state.suggestOnComplete = true;
+    scheduleCompletions(40);
     scheduleDiagnostics(550);
   }
 
@@ -1295,7 +1351,7 @@ OUTPUT total`;
       if (source !== getEditorValue() || offset !== getCursorOffset()) return;
       renderCompletions(result, source, offset);
       triggerInlineSuggest();
-      triggerSuggestWidget();
+      if (state.suggestOnComplete) triggerSuggestWidget();
     } catch (error) {
       if (sequence !== state.completionSequence) return;
       renderCompletionError(error);
@@ -1975,6 +2031,13 @@ OUTPUT total`;
       localStorage.setItem(STORAGE_SOURCE, current.source);
       localStorage.setItem(STORAGE_FILE, current.name);
     }
+  }
+
+  function persistDocumentsSoon() {
+    const current = activeDocument();
+    if (current && state.editor) current.source = getEditorValue();
+    clearTimeout(state.persistTimer);
+    state.persistTimer = setTimeout(persistDocuments, 400);
   }
 
   function unusedProgramName() {

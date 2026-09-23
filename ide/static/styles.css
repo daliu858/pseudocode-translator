@@ -131,11 +131,12 @@ textarea:focus-visible {
 }
 
 .topbar {
+  position: relative;
   flex: 0 0 50px;
   min-height: 50px;
-  display: grid;
-  grid-template-columns: 44px minmax(100px, 1fr) auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 14px;
   padding: 0 10px;
   border-bottom: 2px solid var(--gold);
@@ -167,13 +168,19 @@ textarea:focus-visible {
 .app-shell.sidebar-collapsed #sidebar-toggle .icon { transform: scaleX(-1); }
 
 .document-title {
-  justify-self: center;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(42vw, 420px);
   min-width: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   color: var(--muted);
   font: 12px/1 var(--font-code);
+  pointer-events: none;
 }
 
 .status-dot {
@@ -203,10 +210,12 @@ textarea:focus-visible {
 
 .topbar-actions {
   position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
+  margin-left: auto;
 }
 
 .popover-anchor { position: relative; }
@@ -296,13 +305,23 @@ textarea:focus-visible {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, 220px) 5px minmax(0, 1fr);
   overflow: hidden;
-  transition: grid-template-columns 180ms ease;
 }
 .app-shell.sidebar-collapsed .workbench {
-  grid-template-columns: 0 minmax(0, 1fr);
+  grid-template-columns: 0 0 minmax(0, 1fr);
 }
+.sidebar-resizer {
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+.sidebar-resizer:hover,
+.sidebar-resizing .sidebar-resizer { background: var(--gold); }
+.app-shell.sidebar-collapsed .sidebar-resizer { display: none; }
+body.sidebar-resizing,
+body.output-resizing { cursor: col-resize; user-select: none; }
+body.output-resizing { cursor: row-resize; }
 
 .explorer {
   min-width: 0;
@@ -726,10 +745,11 @@ textarea:focus-visible {
   content: "";
   position: absolute;
   right: 0;
-  bottom: -1px;
+  bottom: 0;
   left: 0;
   height: 2px;
   background: var(--margin-ink);
+  pointer-events: none;
 }
 .editor-tab.active .tab-file-glyph { color: var(--margin-ink); opacity: 1; }
 .tab-file-glyph {
@@ -1163,7 +1183,6 @@ body.output-resizing .editor-host { pointer-events: none; }
 }
 
 @media (max-width: 980px) {
-  .workbench { grid-template-columns: 184px minmax(0, 1fr); }
   .file-action .button-label,
   #workspace-open-trigger .button-label { display: none; }
   .file-action { width: 30px; padding: 0; }
@@ -1174,6 +1193,7 @@ body.output-resizing .editor-host { pointer-events: none; }
 @media (max-width: 780px) {
   .topbar { grid-template-columns: 44px minmax(80px, 1fr) auto; gap: 8px; }
   .document-title,
+  .sidebar-resizer,
   .explorer,
   .editor-help { display: none; }
   .workbench { grid-template-columns: minmax(0, 1fr); }
