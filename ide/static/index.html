@@ -84,15 +84,31 @@
       <aside class="explorer" aria-label="Explorer">
         <div class="panel-heading" data-i18n="deskFolder">工作夹</div>
 
-        <div class="section-label" data-i18n="program">程序</div>
-        <button class="file-row active" type="button">
+        <div class="section-head">
+          <span class="section-label" data-i18n="program">程序</span>
+          <div class="section-actions">
+            <button class="sidebar-button" id="sidebar-new" type="button" data-i18n="newProgram" data-i18n-title="newProgramTitle">新建</button>
+            <button class="sidebar-button" id="sidebar-open" type="button" data-i18n="open" data-i18n-title="openTitle">打开</button>
+            <button class="sidebar-button" id="sidebar-save" type="button" data-i18n="save" data-i18n-title="saveTitle">保存</button>
+          </div>
+        </div>
+        <div class="file-row active" id="program-row">
           <span class="file-icon" aria-hidden="true">§</span>
           <span id="explorer-file-name">main.pseudo</span>
+          <input id="explorer-rename-input" class="rename-input" type="text" spellcheck="false" hidden>
+          <button class="row-action" id="sidebar-rename" type="button" data-i18n-title="renameTitle" aria-label="重命名">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 11.5 11 3l2 2-8.5 8.5H2.5v-2Z"/><path d="M9.5 4.5 11.5 6.5"/></svg>
+          </button>
           <span class="file-row-status" aria-hidden="true"></span>
-        </button>
+        </div>
+        <p class="section-hint" id="program-hint" data-i18n="programHint"></p>
 
-        <div class="section-label with-rule" data-i18n="examples">示例</div>
-        <div id="example-list" class="example-list"></div>
+        <button class="section-toggle with-rule" id="examples-toggle" type="button" aria-expanded="false">
+          <span class="section-chevron" aria-hidden="true"></span>
+          <span data-i18n="examples">示例</span>
+        </button>
+        <p class="section-hint" id="examples-hint" data-i18n="examplesHint" hidden></p>
+        <div id="example-list" class="example-list" hidden></div>
       </aside>
 
       <section class="editor-column">

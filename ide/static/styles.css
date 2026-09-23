@@ -327,6 +327,13 @@ textarea:focus-visible {
   letter-spacing: 0.09em;
 }
 
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 8px;
+}
 .section-label {
   padding: 9px 12px 5px;
   color: var(--muted-2);
@@ -334,10 +341,79 @@ textarea:focus-visible {
   font-weight: 700;
   letter-spacing: 0.1em;
 }
-.section-label.with-rule {
-  margin-top: 12px;
-  padding-top: 14px;
+.section-label.with-rule,
+.section-toggle.with-rule {
+  margin-top: 4px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+
+.section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px 5px;
+  border: 0;
+  color: var(--muted-2);
+  background: transparent;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: left;
+  cursor: pointer;
+}
+.section-toggle:hover { color: var(--text); }
+.section-chevron {
+  width: 0;
+  height: 0;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  border-left: 5px solid currentColor;
+  transition: transform 120ms ease;
+}
+.section-toggle[aria-expanded="true"] .section-chevron {
+  transform: rotate(90deg);
+}
+
+.section-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+.sidebar-button {
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 11px;
+}
+.sidebar-button:hover {
+  color: var(--text-strong);
+  border-color: var(--gold);
+  background: var(--surface-hover);
+}
+.section-hint {
+  margin: 0;
+  padding: 6px 14px 10px;
+  color: var(--muted-2);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.rename-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  color: var(--text-strong);
+  background: var(--editor-bg);
+  font: 12px/1 var(--font-code);
+  user-select: text;
 }
 
 .file-row,
@@ -358,10 +434,45 @@ textarea:focus-visible {
 .file-row:hover,
 .example-row:hover { color: var(--text); background: var(--surface-hover); }
 .file-row.active { color: var(--text-strong); background: var(--surface-active); box-shadow: inset 3px 0 0 var(--margin-ink); }
+#explorer-file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-action {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+}
+.file-row:hover .row-action,
+.file-row:focus-within .row-action,
+.row-action:focus-visible {
+  opacity: 1;
+}
+.row-action:hover {
+  color: var(--text-strong);
+  background: var(--surface-hover);
+}
+.example-row {
+  padding-left: 28px;
+  color: var(--muted);
+  font-size: 12px;
+}
 .file-row-status {
   width: 5px;
   height: 5px;
-  margin-left: auto;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: var(--margin-ink);
   opacity: 0;
@@ -630,21 +741,11 @@ kbd {
   min-height: 0;
   background: var(--editor-bg);
 }
-.editor-host::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: var(--margin-left, 36px);
-  width: 1px;
-  background: var(--margin-ink);
-  opacity: 0;
-  z-index: 10;
-  pointer-events: none;
-  transition: opacity 140ms ease, left 80ms ease;
+.monaco-editor .margin-view-overlays .line-numbers {
+  font-family: Consolas, "Cascadia Mono", "Cascadia Code", "Liberation Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
 }
-.editor-host.margin-ready::before { opacity: 0.5; }
-.editor-host.no-margin-line::before { display: none; }
 #editor,
 #fallback-editor { width: 100%; height: 100%; }
 #fallback-editor {

@@ -11,6 +11,7 @@
   const STORAGE_LOCALE = "pseudocode-studio.locale.v1";
   const STORAGE_SIDEBAR = "pseudocode-studio.sidebar.v1";
   const STORAGE_COMPLETION = "pseudocode-studio.completion.v1";
+  const STORAGE_EXAMPLES = "pseudocode-studio.examples.v1";
   const THEME_DARK = "studio-dark";
   const THEME_IVORY = "ivory-gold";
   const I18N = {
@@ -23,6 +24,11 @@
       runTitle: "编译并运行（Ctrl+Shift+Enter）",
       themeNext: "纸页", themeNextDark: "灯下",
       deskFolder: "工作夹", program: "程序", dataFiles: "数据文件", examples: "示例",
+      newProgram: "新建", newProgramTitle: "新建一份空程序",
+      rename: "重命名", renameTitle: "重命名当前程序（双击文件名）",
+      programHint: "双击名称重命名。保存会按这个文件名下载。",
+      examplesHint: "示例不是文件。点开后会替换当前程序。",
+      discardConfirm: "当前程序还有未保存的修改。继续会丢掉这些修改。",
       dataFolder: "数据文件夹",
       dataFolderTitle: "OPENFILE / READFILE / WRITEFILE 使用的本机文件夹",
       openFolder: "打开文件夹", useDesktop: "放到桌面", importFile: "导入", newFile: "新建",
@@ -123,6 +129,11 @@ CLOSEFILE "FileB.txt"`,
       runTitle: "Compile and run (Ctrl+Shift+Enter)",
       themeNext: "Paper", themeNextDark: "Lamp",
       deskFolder: "Folder", program: "Program", dataFiles: "Data files", examples: "Examples",
+      newProgram: "New", newProgramTitle: "Start an empty program",
+      rename: "Rename", renameTitle: "Rename this program (double-click the name)",
+      programHint: "Double-click the name to rename. Save downloads that file name.",
+      examplesHint: "Examples are not files. Opening one replaces the current program.",
+      discardConfirm: "This program has unsaved changes. Continue and discard them?",
       dataFolder: "Data folder",
       dataFolderTitle: "Local folder used by OPENFILE / READFILE / WRITEFILE",
       openFolder: "Open folder", useDesktop: "Desktop", importFile: "Import", newFile: "New",
@@ -300,6 +311,8 @@ OUTPUT total`;
       "files-panel", "files-blurb", "locale-zh", "locale-en",
       "workspace-open-trigger", "workspace-popover", "sidebar-toggle",
       "completion-toggle", "output-resizer",
+      "program-row", "explorer-rename-input", "sidebar-new", "sidebar-rename",
+      "sidebar-open", "sidebar-save", "examples-toggle", "examples-hint",
     ].forEach((id) => {
       dom[id] = document.getElementById(id);
     });
@@ -401,6 +414,7 @@ OUTPUT total`;
       (item) => item.name === "Copy text file",
     );
     if (!example) return;
+    if (!confirmDiscard()) return;
     setEditorValue(example.code);
     setFileName("copy-text-file.pseudo");
     setDirty(true);
@@ -421,6 +435,7 @@ OUTPUT total`;
       button.className = "example-row";
       button.textContent = exampleLabel(example);
       button.addEventListener("click", () => {
+        if (!confirmDiscard()) return;
         setEditorValue(example.code);
         setFileName(`${slugify(example.name)}.pseudo`);
         setDirty(true);
@@ -498,6 +513,52 @@ OUTPUT total`;
     dom["theme-button"].addEventListener("click", toggleTheme);
     dom["open-button"].addEventListener("click", () => dom["file-input"].click());
     dom["save-button"].addEventListener("click", saveFile);
+    if (dom["sidebar-open"]) {
+      dom["sidebar-open"].addEventListener("click", () => dom["file-input"].click());
+    }
+    if (dom["sidebar-save"]) {
+      dom["sidebar-save"].addEventListener("click", saveFile);
+    }
+    if (dom["sidebar-new"]) {
+      dom["sidebar-new"].addEventListener("click", newProgram);
+    }
+    if (dom["sidebar-rename"]) {
+      dom["sidebar-rename"].addEventListener("mousedown", (event) => {
+        event.preventDefault();
+      });
+      dom["sidebar-rename"].addEventListener("click", (event) => {
+        event.stopPropagation();
+        beginRename();
+      });
+    }
+    if (dom["program-row"]) {
+      dom["program-row"].addEventListener("dblclick", (event) => {
+        if (event.target === dom["explorer-rename-input"]) return;
+        if (event.target.closest && event.target.closest("#sidebar-rename")) return;
+        beginRename();
+      });
+    }
+    if (dom["explorer-rename-input"]) {
+      dom["explorer-rename-input"].addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commitRename();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          cancelRename();
+        }
+      });
+      dom["explorer-rename-input"].addEventListener("blur", () => {
+        if (!dom["explorer-rename-input"].hidden) commitRename();
+      });
+    }
+    if (dom["examples-toggle"]) {
+      const open = localStorage.getItem(STORAGE_EXAMPLES) === "open";
+      setExamplesOpen(open, false);
+      dom["examples-toggle"].addEventListener("click", () => {
+        setExamplesOpen(dom["examples-toggle"].getAttribute("aria-expanded") !== "true");
+      });
+    }
     dom["file-input"].addEventListener("change", openSelectedFile);
     dom["stdin-input"].addEventListener("input", () => {
       localStorage.setItem(STORAGE_STDIN, dom["stdin-input"].value);
@@ -745,8 +806,8 @@ OUTPUT total`;
       // two ASCII characters and the compiler correctly diagnoses `!=`.
       fontLigatures: false,
       minimap: { enabled: false },
-      lineNumbersMinChars: 2,
-      lineDecorationsWidth: 6,
+      lineNumbersMinChars: 3,
+      lineDecorationsWidth: 16,
       padding: { top: 12, bottom: 16 },
       tabSize: 4,
       insertSpaces: true,
@@ -756,7 +817,7 @@ OUTPUT total`;
       smoothScrolling: true,
       cursorSmoothCaretAnimation: "on",
       renderWhitespace: "selection",
-      renderLineHighlight: "all",
+      renderLineHighlight: "line",
       bracketPairColorization: { enabled: true },
       guides: { bracketPairs: false, indentation: true },
       quickSuggestions: { other: "on", comments: "off", strings: "off" },
@@ -807,10 +868,6 @@ OUTPUT total`;
       label: t("reindent"),
       run: () => reindentCurrentEditor(),
     });
-    // Keep the paper margin rule glued to the right edge of the (narrowed)
-    // line-number gutter instead of a hard-coded pixel offset.
-    state.editor.onDidLayoutChange(updateMarginLine);
-    updateMarginLine();
     if (state.outputHeight !== null) applyOutputHeight(state.outputHeight);
     dom["editor-mode"].textContent = `Monaco ${MONACO_VERSION}`;
     dom["fallback-editor"].hidden = true;
@@ -824,17 +881,33 @@ OUTPUT total`;
     monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, {
       ignoreCase: true,
       keywords,
+      types: ["INTEGER", "REAL", "STRING", "CHAR", "BOOLEAN", "DATE"],
+      builtins: ["LENGTH", "RIGHT", "MID", "LCASE", "UCASE", "INT", "RAND"],
+      constants: ["TRUE", "FALSE"],
+      fileModes: ["READ", "WRITE", "APPEND", "RANDOM"],
       tokenizer: {
         root: [
           [/\/\/.*$/, "comment"],
           [/"[^"\n]*"/, "string"],
           [/"[^"\n]*$/, "string.invalid"],
-          [/'[^'\n]'/, "string.char"],
+          [/['\u2018\u2019][^'\u2018\u2019\n]['\u2018\u2019]/, "string.char"],
           [/\d+\.\d+/, "number.float"],
           [/\d+/, "number"],
-          [/[A-Za-z_][A-Za-z0-9_]*/, { cases: { "@keywords": "keyword", "@default": "identifier" } }],
-          [/<-|<=|>=|<>|[=<>+\-*\/&^]/, "operator"],
-          [/[()\[\]]/, "@brackets"],
+          [/[A-Za-z_][A-Za-z0-9_]*/, {
+            cases: {
+              "@types": "type",
+              "@builtins": "predefined",
+              "@constants": "constant",
+              "@fileModes": "keyword",
+              "@keywords": "keyword",
+              "@default": "identifier",
+            },
+          }],
+          [/<-|\u2190/, "operator.assignment"],
+          [/<=|>=|<>/, "operator"],
+          [/[=<>+\-*\/&^]/, "operator"],
+          [/[()]/, "delimiter.parenthesis"],
+          [/[\[\]]/, "delimiter.square"],
           [/[,:.]/, "delimiter"],
         ],
       },
@@ -893,21 +966,27 @@ OUTPUT total`;
       inherit: true,
       rules: [
         { token: "keyword", foreground: "6FBFA8", fontStyle: "bold" },
+        { token: "type", foreground: "8EC6E6" },
+        { token: "predefined", foreground: "D4B483", fontStyle: "italic" },
+        { token: "constant", foreground: "B9C98E" },
         { token: "identifier", foreground: "C7C1AE" },
-        { token: "operator", foreground: "C7C1AE" },
+        { token: "operator", foreground: "D7A15A" },
+        { token: "operator.assignment", foreground: "E4C56A" },
         { token: "number", foreground: "B9C98E" },
         { token: "number.float", foreground: "B9C98E" },
         { token: "string", foreground: "C99A4B" },
-        { token: "string.char", foreground: "C99A4B" },
+        { token: "string.char", foreground: "E6C27A" },
         { token: "string.invalid", foreground: "D06A55" },
         { token: "comment", foreground: "70806F", fontStyle: "italic" },
         { token: "delimiter", foreground: "8B8977" },
+        { token: "delimiter.parenthesis", foreground: "8B8977" },
+        { token: "delimiter.square", foreground: "A89878" },
       ],
       colors: {
         "editor.background": "#141C17",
         "editor.foreground": "#C7C1AE",
         "editorLineNumber.foreground": "#5A6659",
-        "editorLineNumber.activeForeground": "#C99A4B",
+        "editorLineNumber.activeForeground": "#C7C1AE",
         "editor.lineHighlightBackground": "#1A231F",
         "editorCursor.foreground": "#C99A4B",
         "editor.selectionBackground": "#2C4A3E",
@@ -934,21 +1013,27 @@ OUTPUT total`;
       inherit: true,
       rules: [
         { token: "keyword", foreground: "1F6B58", fontStyle: "bold" },
+        { token: "type", foreground: "2A6F8F" },
+        { token: "predefined", foreground: "8A5A12", fontStyle: "italic" },
+        { token: "constant", foreground: "6B7A23" },
         { token: "identifier", foreground: "3E372A" },
         { token: "operator", foreground: "A87B2D" },
+        { token: "operator.assignment", foreground: "8C6420" },
         { token: "number", foreground: "6B7A23" },
         { token: "number.float", foreground: "6B7A23" },
         { token: "string", foreground: "9A6A1F" },
-        { token: "string.char", foreground: "9A6A1F" },
+        { token: "string.char", foreground: "7A5418" },
         { token: "string.invalid", foreground: "A23B2C" },
         { token: "comment", foreground: "9A8F74", fontStyle: "italic" },
         { token: "delimiter", foreground: "7C7260" },
+        { token: "delimiter.parenthesis", foreground: "7C7260" },
+        { token: "delimiter.square", foreground: "8C6230" },
       ],
       colors: {
         "editor.background": "#F8F3E6",
         "editor.foreground": "#3E372A",
         "editorLineNumber.foreground": "#A89C82",
-        "editorLineNumber.activeForeground": "#A87B2D",
+        "editorLineNumber.activeForeground": "#3E372A",
         "editor.lineHighlightBackground": "#EFE6D2",
         "editorCursor.foreground": "#A87B2D",
         "editor.selectionBackground": "#DCE7DF",
@@ -1056,20 +1141,9 @@ OUTPUT total`;
     }
   }
 
-  function updateMarginLine() {
-    if (state.mode !== "monaco" || !state.editor) return;
-    const host = document.querySelector(".editor-host");
-    if (!host) return;
-    const left = state.editor.getLayoutInfo().contentLeft;
-    host.style.setProperty("--margin-left", `${Math.max(0, left)}px`);
-    host.classList.add("margin-ready");
-  }
-
   function initFallback(initialSource) {
     state.mode = "fallback";
     state.editor = dom["fallback-editor"];
-    const host = document.querySelector(".editor-host");
-    if (host) host.classList.add("no-margin-line");
     dom.editor.hidden = true;
     state.editor.hidden = false;
     state.editor.value = initialSource;
@@ -1814,11 +1888,75 @@ OUTPUT total`;
     dom["cursor-position"].textContent = `Ln ${lines.length}, Col ${lines[lines.length - 1].length + 1}`;
   }
 
+  function confirmDiscard() {
+    if (!state.dirty) return true;
+    return window.confirm(t("discardConfirm"));
+  }
+
+  function newProgram() {
+    if (!confirmDiscard()) return;
+    cancelRename();
+    setEditorValue("");
+    setFileName("main.pseudo");
+    setDirty(true);
+    if (state.mode === "monaco" && state.editor) state.editor.focus();
+  }
+
+  function beginRename() {
+    const input = dom["explorer-rename-input"];
+    const label = dom["explorer-file-name"];
+    if (!input || !label) return;
+    input.value = state.fileName;
+    input.hidden = false;
+    label.hidden = true;
+    input.focus();
+    input.select();
+  }
+
+  function cancelRename() {
+    const input = dom["explorer-rename-input"];
+    const label = dom["explorer-file-name"];
+    if (!input || !label) return;
+    input.hidden = true;
+    label.hidden = false;
+  }
+
+  function commitRename() {
+    const input = dom["explorer-rename-input"];
+    if (!input || input.hidden) return;
+    const next = normaliseProgramName(input.value);
+    cancelRename();
+    if (next && next !== state.fileName) {
+      setFileName(next);
+      setDirty(true);
+    }
+  }
+
+  function normaliseProgramName(name) {
+    let cleaned = sanitiseFileName(name);
+    if (cleaned === "main.pseudo" && !String(name || "").trim()) return state.fileName;
+    if (!cleaned.includes(".")) cleaned += ".pseudo";
+    return cleaned;
+  }
+
+  function setExamplesOpen(open, persist = true) {
+    const toggle = dom["examples-toggle"];
+    if (toggle) toggle.setAttribute("aria-expanded", String(!!open));
+    if (dom["example-list"]) dom["example-list"].hidden = !open;
+    if (dom["examples-hint"]) dom["examples-hint"].hidden = !open;
+    if (persist) localStorage.setItem(STORAGE_EXAMPLES, open ? "open" : "closed");
+  }
+
   async function openSelectedFile() {
     const file = dom["file-input"].files && dom["file-input"].files[0];
     if (!file) return;
+    if (!confirmDiscard()) {
+      dom["file-input"].value = "";
+      return;
+    }
     try {
       const source = await file.text();
+      cancelRename();
       setEditorValue(source);
       setFileName(file.name || "main.pseudo");
       setDirty(false);
