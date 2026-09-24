@@ -47,7 +47,7 @@ International Education, e.g. 9618/0478) pseudocode:
 ### 1. Get the code
 
 ```bash
-git clone https://github.com/daliu858/pesudocode-translator.git
+git clone https://github.com/daliu858/pseudocode-translator.git
 ```
 
 Or on GitHub: **Code → Download ZIP**, then unzip. You should see `start.bat` next to `README.md`.
@@ -78,7 +78,7 @@ Same URL, same rule: leave the terminal running until you are done.
 **From a terminal (any OS)**
 
 ```bash
-cd pesudocode-translator    # the folder that contains start.bat
+cd pseudocode-translator    # the folder that contains start.bat
 python -m ide.server
 ```
 
